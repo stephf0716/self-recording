@@ -118,6 +118,14 @@ Nothing is gated, but nothing is disguised either.
 
 `reference/pitfalls.md` is worth reading even if you let the AI drive.
 
+- `tests/test-skill.sh` — behavioral regression suite for scripts and templates
+
+Run it from the repository root before installing or publishing:
+
+```bash
+bash skills/self-recording/tests/test-skill.sh
+```
+
 ## Requirements
 
 - `git`. On Windows, **Git for Windows** — the scripts need Git Bash.
@@ -127,5 +135,5 @@ Nothing is gated, but nothing is disguised either.
 
 ## Status and licensing
 
-Version 0.3.0. MIT. Built from a working setup rather than designed in the
+Version 0.3.1. MIT. Built from a working setup rather than designed in the
 abstract — every item in `pitfalls.md` cost real debugging time.

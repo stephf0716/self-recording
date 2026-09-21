@@ -142,6 +142,36 @@ it can't.
 
 ---
 
+## 4c. Auto-commit boundaries can include unrelated changes
+
+`hook-autocommit.sh` runs `git add -A` for the whole vault. A `checkpoint:` or
+`sweep:` commit can therefore include hand edits, cloud-sync arrivals, or another
+client's unfinished work that was already present when the hook ran. The subject
+names the boundary that captured the changes, not necessarily the sole author.
+
+**Choose deliberately:** whole-vault capture is appropriate when the vault's safety
+contract prioritizes prompt reversibility of every write. It is not appropriate for
+a workspace that promises reviewed, file-scoped commits or routinely has unrelated
+concurrent edits. Such a vault needs its own scoped checkpoint mechanism; do not
+install the generic hooks or sweep unchanged.
+
+---
+
+## 4d. Hermes cron refuses cloud-synced script paths
+
+Hermes cron lifecycle checks must inspect every script before scheduling it. A job
+that points directly at `_tools/hook-autocommit.sh` inside iCloud or
+`~/Library/CloudStorage` is rejected, and a local wrapper that merely calls that
+file is rejected too because the guard follows the reference.
+
+**Fix:** put a self-contained script under `$HERMES_HOME/scripts` that performs the
+detached-git status/add/commit operations itself, then create a `no_agent` cron job
+for that local script. Keep it silent on a clean tree. The job only fires while its
+Hermes gateway is running, so read back the job state and verify
+`gateway_running`; a saved schedule is not necessarily active automation.
+
+---
+
 ## 5. Sandboxed agents can't write the places you'd expect
 
 An agent may be blocked from `.claude/settings.json`, `.claude/skills/`, `~/.claude/`,
@@ -243,9 +273,10 @@ primary information: the entries stay the record.
 
 Two things make this hold rather than drift:
 
-- A `<!-- current-state: YYYY-MM-DD -->` marker, and
-  `scripts/check-current-state.sh` reporting `STALE` when a `decision` entry is
-  newer than the marker.
+- A `<!-- current-state: YYYY-MM-DD; decisions: N -->` marker, and
+  `scripts/check-current-state.sh` reporting `STALE` when the journal's number of
+  `decision` entries differs. The count catches same-day additions. Legacy
+  date-only markers remain readable but only detect decisions on later dates.
 - The contract rule: *write the entry first, then the pointer.* Never a fact in
   the block that has no entry behind it.
 

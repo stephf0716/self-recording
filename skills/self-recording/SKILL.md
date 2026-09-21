@@ -1,7 +1,7 @@
 ---
 name: self-recording
 description: Set up a Markdown folder as durable, portable AI memory that records itself while you work — project journals, provenance metadata, git-backed undo, and auto-commit hooks. Use when someone wants their notes or project folder to become memory an AI reads and writes across sessions and clients, wants to stop re-explaining context to every new chat, wants AI-written notes kept distinguishable from their own, or asks to replicate an "Obsidian as AI memory" / "AGENTS.md vault" setup. Also use to audit or repair an existing one.
-version: 0.3.0
+version: 0.3.1
 license: MIT
 ---
 
@@ -166,7 +166,10 @@ from that. Per-turn commits mean uncommitted work never outlives the turn.
 
 **Hermes Agent** — skip `install-hooks.sh` unless they also use Claude Code.
 Hermes injects `AGENTS.md` (and `.hermes.md`). For auto-commit, use the scheduled
-sweep below, or a Hermes cron that runs `_tools/hook-autocommit.sh sweep`.
+sweep below, or a Hermes script-only cron backed by a self-contained machine-local
+script under `$HERMES_HOME/scripts`. Do not point Hermes cron directly at a
+cloud-synced `_tools/hook-autocommit.sh`; the lifecycle guard refuses to scan
+cloud-synced script paths.
 
 **Anything else** (ChatGPT, Copilot, Cursor, Codex, …) — they read `AGENTS.md`
 and any pointer file they auto-load. No Claude hooks. Use the scheduled sweep
@@ -181,8 +184,12 @@ sandboxed session, which can't write `~/Library/LaunchAgents`):
 bash /path/to/vault/_tools/install-autocommit-agent.sh
 ```
 
-It runs `hook-autocommit.sh sweep` every 120 s (no-op on a clean tree). If the
-vault is under `~/Library/CloudStorage` or iCloud, launchd needs Full Disk Access
+It runs `hook-autocommit.sh sweep` every 120 s (no-op on a clean tree). It stages
+the whole vault with `git add -A`, so a commit boundary may also capture hand edits,
+cloud-sync arrivals, or another client's outstanding changes. Use it only when
+whole-vault ambient history matches the vault's policy; do not install it over a
+reviewed, file-scoped checkpoint workflow. If the vault is under
+`~/Library/CloudStorage` or iCloud, launchd needs Full Disk Access
 for `/bin/bash`; the installer detects the failure and prints the steps. That
 grant is broad — say so. See `reference/pitfalls.md` 4a and 4b.
 
@@ -236,7 +243,8 @@ What makes it survivable, and worth saying plainly:
 
 - Entries are append-only and dated, so a bad one is *visible* rather than silently
   replacing a good one.
-- Every session is one revertible commit.
+- Every automated boundary is revertible: Claude normally commits per turn;
+  lifecycle recovery and scheduled sweeps may group changes differently.
 - `confidence: probable` is greppable, so an audit is possible whenever they want.
 
 They bought frictionlessness with accumulated noise. That's usually the right trade

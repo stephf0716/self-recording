@@ -2,7 +2,7 @@
   "name": "self-recording",
   "displayName": "Self-recording",
   "description": "Set up a Markdown folder as durable, portable AI memory that records itself while you work \u2014 project journals, provenance metadata, git-backed undo, and auto-commit hooks. Use when someone wants their notes or project folder to become memory an AI reads and writes across sessions and clients, wants to stop re-explaining context to every new chat, wants AI-written notes kept distinguishable from their own, or asks to replicate an \"Obsidian as AI memory\" / \"AGENTS.md vault\" setup. Also use to audit or repair an existing one.",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "license": "MIT",
   "keywords": [
     "memory",

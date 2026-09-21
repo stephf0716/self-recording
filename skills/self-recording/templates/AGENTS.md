@@ -87,17 +87,20 @@ one part of the journal that is **rewritten in place** rather than appended to.
 
 - **Read it first.** It is what "current" means; go into the entries only for
   detail or history.
-- **Regenerate it at the end of any session that adds a `decision` entry**, and
-  bump the `<!-- current-state: YYYY-MM-DD -->` marker to today.
+- **Regenerate it at the end of any session that adds a `decision` entry.** Set
+  the marker date to today and `decisions:` to the journal's total number of
+  `type: decision` entries. The count detects same-day drift that a date alone
+  cannot.
 - Keep it under ~30 bullets. If it needs more, the project needs a plan file, not
   a longer summary.
 - Never put a fact in the block that has no entry behind it. Write the entry
   first, then the pointer.
 
-`bash _tools/check-current-state.sh` flags any journal whose newest `decision`
-entry is dated after its marker (`STALE`) or that has no block (`MISSING`). A
-`STALE` result is a warning to regenerate, not a data problem — the entries are
-still authoritative.
+`bash _tools/check-current-state.sh` flags a journal `STALE` when a counted
+marker no longer matches its decision entries. Legacy date-only markers fall back
+to comparing the newest `decision` date. It reports `MISSING` when there is no
+block. A `STALE` result is a warning to regenerate, not a data problem — the
+entries are still authoritative.
 
 ## What is worth an entry
 

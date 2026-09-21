@@ -116,13 +116,16 @@ information, rewriting it loses nothing; the entries remain the record.
 Marker line, required, first thing inside the section:
 
 ```markdown
-<!-- current-state: 2026-09-10 -->
+<!-- current-state: 2026-09-10; decisions: 7 -->
 ```
 
-The date is when the block was last regenerated. `_tools/check-current-state.sh`
-compares it with the newest `type: decision` entry and reports `STALE` if the
-decision is newer. Regenerate at the end of any session that adds a `decision`.
-Target under ~30 bullets. Full rule in `AGENTS.md`.
+The date is when the block was last regenerated; `decisions` is the total number
+of `type: decision` entries summarized at that point. `_tools/check-current-state.sh`
+reports `STALE` when the count changes, including when a decision is added later on
+the same day. Legacy date-only markers remain readable but cannot detect same-day
+drift; upgrade the marker when next regenerating the block. Regenerate at the end
+of any session that adds a `decision`. Target under ~30 bullets. Full rule in
+`AGENTS.md`.
 
 ## Auditing later
 

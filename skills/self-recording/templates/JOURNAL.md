@@ -20,7 +20,7 @@ Format and field definitions: `../AGENTS.md` and `../MEMORY-SCHEMA.md`.
 
 ## Current state
 
-<!-- current-state: {{TODAY}} -->
+<!-- current-state: {{TODAY}}; decisions: 0 -->
 
 Pointer summary of what is currently true. **Contains no primary information** —
 every line cites the dated entry that established it. Rewritten in place (the one

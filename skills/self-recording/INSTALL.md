@@ -30,9 +30,18 @@ Copy **the whole folder**. A `SKILL.md` URL by itself is not enough.
 
 5. Install only the automation that client actually has. Claude hooks are
    Claude-only. Hermes-only: skip `.claude/settings.json`; use the scheduled
-   sweep or a Hermes cron that runs `_tools/hook-autocommit.sh sweep`.
+   sweep or a Hermes script-only cron backed by a self-contained machine-local
+   script under `$HERMES_HOME/scripts`. Do not point a Hermes cron job directly
+   at cloud-synced `_tools`; the lifecycle guard refuses to scan those paths.
 
-6. Non-negotiables: no free writes without version history; never mark the
+6. From this skill directory (the folder containing `SKILL.md`), run the bundled
+   regression suite before installing or upgrading:
+
+   ```bash
+   bash tests/test-skill.sh
+   ```
+
+7. Non-negotiables: no free writes without version history; never mark the
    agent's own inference `confidence: confirmed`.
 
 Do not invent a different memory system. Do not restructure existing notes
