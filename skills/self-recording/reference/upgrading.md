@@ -40,7 +40,9 @@ bash scripts/upgrade.sh /path/to/vault --apply # replace untouched tools, stamp,
 Then, for every version after the one the report says the vault was built
 with, work through that version's section below. `_tools/.self-recording-version`
 records the result; vaults from before 0.4.0 have no stamp, and the report
-infers the version from the tools instead.
+infers the version from the tools instead. When several releases ship identical
+copies of the tools it finds, it reports the range and starts the list from
+the oldest; check each section against the contract before merging it.
 
 If the vault has **no version history**, stop. Set it up first (SKILL.md
 Step 2). An upgrade with no undo is exactly the unreviewed write the design
@@ -76,6 +78,10 @@ including the supervised first run. It adds:
   `_tools/`. `upgrade.sh` does not track it; diff it by hand on later upgrades.
 - The "Nightly consolidation" section at the end of `templates/AGENTS.md` —
   merge it into the vault's contract only once the job is enabled.
+
+The job's summary step runs `_tools/check-current-state.sh`. If the report
+shows it `ABSENT`, the job skips summaries and says so; copy it from
+`scripts/` first if the owner wants them refreshed.
 
 Established vaults need care that a new one does not: months of Hermes memory
 may exist only in `USER.md` / `MEMORY.md`. The job's first run harvests those

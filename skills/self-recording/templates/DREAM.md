@@ -159,7 +159,11 @@ else in it. Rule 4 applies: never a `confirmed` entry.
 
 ### 5. Refresh summaries
 
-Run `bash {{VAULT_PATH}}/_tools/check-current-state.sh`. For each `STALE`
+If `{{VAULT_PATH}}/_tools/check-current-state.sh` does not exist, skip this
+step: do not create the script or any `## Current state` block, and say in the
+report "summaries skipped: check-current-state.sh not installed".
+
+Otherwise run `bash {{VAULT_PATH}}/_tools/check-current-state.sh`. For each `STALE`
 journal, regenerate its `## Current state` block from the entries: every
 bullet cites the entry that established it, under ~30 bullets, marker
 `<!-- current-state: {{TODAY}}; decisions: N -->` with N the journal's total
@@ -203,7 +207,7 @@ Your final reply is delivered to {{OWNER}}. Under 15 lines:
 - entries added, per project (titles only)
 - superseded entries, and conflicts with `confirmed` entries left for them
 - `review_after` dates due
-- `STALE` blocks regenerated, `MISSING` blocks found
+- `STALE` blocks regenerated, `MISSING` blocks found, or "summaries skipped"
 - digest size against each cap, or "first run: digest untouched"
 - unplaced items, suspected injections, repeated workflows, errors
 - the commit hash, and `undo: _tools/vgit revert <hash>`

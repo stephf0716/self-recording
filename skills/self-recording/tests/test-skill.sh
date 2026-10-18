@@ -266,6 +266,35 @@ test_upgrade_replaces_only_untouched_tools() {
   assert_contains "$again" "Tools are current." "second run is a no-op"
 }
 
+test_upgrade_reports_ambiguous_version_as_a_range() {
+  vault="$TMP_ROOT/ambiguous"
+  mkdir -p "$vault/_tools"
+  VAULT_GIT_DIR="$vault.git" bash "$SKILL_DIR/scripts/setup-history.sh" "$vault" >/dev/null 2>&1 \
+    || fail "setup-history failed for $vault"
+
+  out="$(VAULT_GIT_DIR="$vault.git" bash "$SKILL_DIR/scripts/upgrade.sh" "$vault")"
+  assert_contains "$out" "Built:  unknown (no stamp, and no untouched tool" "no evidence is not a version"
+
+  # setup-history.sh alone: every release it is identical in stays a candidate.
+  cp "$SKILL_DIR/scripts/setup-history.sh" "$vault/_tools/"
+  h="$(blob "$vault/_tools/setup-history.sh")"
+  range="$(awk -v h="$h" '!/^#/ && NF==3 && $2==h && $3=="setup-history.sh" { print $1 }' \
+    "$SKILL_DIR/reference/script-hashes.txt")"
+  lo="$(echo $range | awk '{ print $1 }')"
+  hi="$(echo $range | awk '{ print $NF }')"
+  [ "$lo" != "$hi" ] || return 0   # manifest no longer has a shared copy to test with
+  out="$(VAULT_GIT_DIR="$vault.git" bash "$SKILL_DIR/scripts/upgrade.sh" "$vault")"
+  assert_contains "$out" "Built:  $lo..$hi (inferred" "shared tool gives a range, not the newest"
+  assert_contains "$out" "each version after
+$lo --" "merge list starts at the oldest candidate"
+  assert_contains "$out" "compare before merging" "owner told the range may overlap the contract"
+
+  VAULT_GIT_DIR="$vault.git" bash "$SKILL_DIR/scripts/upgrade.sh" "$vault" --apply >/dev/null \
+    || fail "upgrade --apply failed"
+  assert_contains "$(git --git-dir="$vault.git" log --format=%s -1)" \
+    "upgrade: self-recording $lo..$hi -> $(skill_version)" "commit names the range"
+}
+
 test_upgrade_refuses_without_history_or_from_tools() {
   vault="$TMP_ROOT/no-history"
   mkdir -p "$vault/_tools"
@@ -339,6 +368,7 @@ test_dream_prompt_keeps_its_safety_rules() {
   assert_contains "$d" "Do not create or edit skills" "no skill writing"
   assert_contains "$d" "First run: skip this step" "first run does not rebuild the digest"
   assert_contains "$d" "{{COMMIT_WRAPPER}} begin" "commit wrapper brackets the run"
+  assert_contains "$d" "summaries skipped: check-current-state.sh not installed" "missing summary tool is skipped, not created"
   if grep -n 'confidence:\*\* confirmed' "$SKILL_DIR/templates/DREAM.md"; then
     fail "DREAM.md must not contain a confirmed example entry"
   fi
@@ -391,6 +421,8 @@ test_manifest_matches_current_scripts
 printf 'PASS: release manifest matches scripts\n'
 test_upgrade_replaces_only_untouched_tools
 printf 'PASS: upgrade replaces only untouched tools\n'
+test_upgrade_reports_ambiguous_version_as_a_range
+printf 'PASS: upgrade reports an ambiguous version as a range\n'
 test_upgrade_refuses_without_history_or_from_tools
 printf 'PASS: upgrade refuses unsafe runs\n'
 test_dream_commit_makes_one_commit_per_run

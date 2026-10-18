@@ -66,6 +66,7 @@ STAMPED=""
 
 UPDATES=""
 MODIFIED=0
+EVIDENCE=0               # untouched tools the version was inferred from
 CANDIDATES="$VERSIONS"   # versions consistent with every untouched tool
 
 while IFS= read -r t; do
@@ -91,6 +92,7 @@ while IFS= read -r t; do
     fi
   fi
   # Narrow the inferred vault version to releases this tool is identical to.
+  EVIDENCE=$((EVIDENCE + 1))
   matches="$(versions_with "$h" "$t")"
   keep=""
   for v in $CANDIDATES; do
@@ -101,15 +103,28 @@ done <<EOF
 $TOOL_LIST
 EOF
 
+# FROM_SHORT is where the per-version merge list starts. When the tools can't
+# pin one release, start from the oldest one they allow: walking a section the
+# contract already has costs a read, skipping one it lacks loses the change.
+OLDEST="$(echo $VERSIONS | awk '{ print $1 }')"
 if [ -n "$STAMPED" ]; then
-  FROM="$STAMPED"
+  FROM="$STAMPED"; FROM_SHORT="$STAMPED"
+elif [ "$EVIDENCE" -eq 0 ]; then
+  FROM="unknown (no stamp, and no untouched tool to infer from)"; FROM_SHORT="$OLDEST"
+elif [ -z "$(echo $CANDIDATES)" ]; then
+  FROM="unknown (no stamp; untouched tools come from different releases)"; FROM_SHORT="$OLDEST"
 else
-  # Newest release every untouched tool agrees with. Empty means mixed.
-  FROM="$(echo $CANDIDATES | awk '{ print $NF }')"
-  FROM="${FROM:-unknown} (inferred; no stamp)"
+  lo="$(echo $CANDIDATES | awk '{ print $1 }')"
+  hi="$(echo $CANDIDATES | awk '{ print $NF }')"
+  FROM_SHORT="$lo"
+  if [ "$lo" = "$hi" ]; then
+    FROM="$lo (inferred; no stamp)"
+  else
+    FROM="$lo..$hi (inferred; no stamp; these releases ship identical copies of its tools)"
+  fi
 fi
 echo "Built:  $FROM"
-FROM_SHORT="${FROM%% *}"
+FROM_LABEL="${FROM%% *}"
 
 legacy=0; nomarker=0
 while IFS= read -r j; do
@@ -127,6 +142,9 @@ echo
 echo "Contract files (AGENTS.md, pointers, MEMORY-SCHEMA.md) are never changed by"
 echo "this script. Merge what reference/upgrading.md lists for each version after"
 echo "$FROM_SHORT -- section by section, with the owner's agreement."
+[ "$FROM_LABEL" = "$FROM_SHORT" ] || {
+  echo "$FROM_SHORT is the oldest release it could be (or the oldest this script"
+  echo "knows), so some sections may already be in its contract: compare before merging."; }
 [ "$MODIFIED" -gt 0 ] && echo "MANUAL: $MODIFIED locally modified tool(s) above."
 
 if [ "$APPLY" -eq 0 ]; then
@@ -174,7 +192,7 @@ printf '%s\n' "$CURRENT" > "$STAMP_FILE"
 
 g add -A
 if ! g diff --cached --quiet; then
-  g commit -q -m "upgrade: self-recording $FROM_SHORT -> $CURRENT" \
+  g commit -q -m "upgrade: self-recording $FROM_LABEL -> $CURRENT" \
     -m "Replaced (untouched copies of an older release):
 ${replaced:-  (none)}
 Locally modified tools left alone: $MODIFIED. Contract files are merged by hand
