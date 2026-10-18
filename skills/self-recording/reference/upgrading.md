@@ -74,6 +74,10 @@ If the owner wants it, follow SKILL.md Step 5, "Nightly consolidation",
 including the supervised first run. It adds:
 
 - `templates/DREAM.md` — the job prompt, filled in for this vault.
+- `_agent/GUIDANCE.md` — written by the job, read by every session. Add the
+  paragraph that points at it near the top of the vault's `AGENTS.md`, and the
+  guidance line to each pointer file (`templates/CLAUDE.md`,
+  `templates/HERMES.md`).
 - `scripts/hermes/dream-commit.sh` — copied to `$HERMES_HOME/scripts/`, not
   `_tools/`. `upgrade.sh` does not track it; diff it by hand on later upgrades.
 - The "Nightly consolidation" section at the end of `templates/AGENTS.md` —

@@ -369,9 +369,31 @@ test_dream_prompt_keeps_its_safety_rules() {
   assert_contains "$d" "First run: skip this step" "first run does not rebuild the digest"
   assert_contains "$d" "{{COMMIT_WRAPPER}} begin" "commit wrapper brackets the run"
   assert_contains "$d" "summaries skipped: check-current-state.sh not installed" "missing summary tool is skipped, not created"
+  assert_contains "$d" "step 7 builds it only from vault entries, never from session text" "guidance is built from entries only"
+  assert_contains "$d" "**Every bullet cites the entry behind it.**" "guidance bullets carry provenance"
+  assert_contains "$d" "Skip \`unverified\`" "unverified entries stay out of guidance"
+  assert_contains "$d" "**How to work, never what to do.**" "guidance cannot carry actions"
+  assert_contains "$d" "never overrides \`AGENTS.md\`" "guidance never outranks the contract"
+  assert_contains "$d" "dismissals" "harvest looks at friction"
+  assert_contains "$d" "is the run's log, not a message" "report is not delivered as a message"
+  if grep -n "delivered to" "$SKILL_DIR/templates/DREAM.md"; then
+    fail "DREAM.md must not assume the report is delivered to the owner"
+  fi
+  # Steps are referenced by number; a renumbering must not leave a dangling one.
+  for n in $(grep -o 'step [0-9]' "$SKILL_DIR/templates/DREAM.md" | awk '{ print $2 }' | sort -u); do
+    grep -q "^### $n\. " "$SKILL_DIR/templates/DREAM.md" || fail "DREAM.md refers to missing step $n"
+  done
   if grep -n 'confidence:\*\* confirmed' "$SKILL_DIR/templates/DREAM.md"; then
     fail "DREAM.md must not contain a confirmed example entry"
   fi
+}
+
+test_every_client_is_pointed_at_the_guidance() {
+  assert_contains "$(cat "$SKILL_DIR/templates/AGENTS.md")" "**If \`_agent/GUIDANCE.md\` exists, read it next, every session.**" "contract points at guidance"
+  assert_contains "$(cat "$SKILL_DIR/templates/AGENTS.md")" "Don't edit \`_agent/GUIDANCE.md\`; change the entries." "live sessions change entries, not guidance"
+  grep -qx '@_agent/GUIDANCE.md' "$SKILL_DIR/templates/CLAUDE.md" || fail "CLAUDE.md must import the guidance"
+  assert_contains "$(cat "$SKILL_DIR/templates/HERMES.md")" "_agent/GUIDANCE.md" "Hermes pointer names the guidance"
+  assert_contains "$(cat "$SKILL_DIR/SKILL.md")" "Set \`deliver\` and \`failure_deliver\` to local" "setup defaults to silent delivery"
 }
 
 test_skill_audit_grep_finds_confirmed_dream_entries() {
@@ -431,5 +453,7 @@ test_dream_commit_refuses_without_history
 printf 'PASS: dream wrapper refuses without history\n'
 test_dream_prompt_keeps_its_safety_rules
 printf 'PASS: dream prompt safety rules\n'
+test_every_client_is_pointed_at_the_guidance
+printf 'PASS: every client is pointed at the guidance\n'
 test_skill_audit_grep_finds_confirmed_dream_entries
 printf 'PASS: dream audit grep\n'
