@@ -261,7 +261,10 @@ The rules it encodes, and why:
 2. Fill `templates/DREAM.md`. Caps come from `memory.user_char_limit` and
    `memory.memory_char_limit` in `config.yaml` (defaults 1,375 and 2,200);
    `{{SILENT_MARKER}}` is `[SILENT]`; `{{HOST}}` is `hostname -s`;
-   `{{GUIDANCE_CHAR_CAP}}` defaults to 4,000 and `{{FRICTION_WINDOW_DAYS}}` to 14. Keep the
+   `{{GUIDANCE_CHAR_CAP}}` defaults to 4,000 and `{{FRICTION_WINDOW_DAYS}}` to 14;
+   `{{WRITE_PERMISSIONS}}` is the vault contract's own rules on what may be
+   stored (a scheduled run may not get the contract injected), or "none beyond
+   rule 7" if it has none. Keep the
    filled copy in the vault (e.g. `_agent/DREAM.md`) as the versioned record —
    the cron job stores its own copy, so re-create the job after editing it.
 3. **First run supervised.** Paste the filled prompt into a live session with

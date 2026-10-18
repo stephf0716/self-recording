@@ -350,6 +350,21 @@ test_dream_commit_makes_one_commit_per_run() {
   unset VAULT_GIT_DIR DREAM_MEMORIES
 }
 
+test_dream_commit_handles_a_vault_path_with_spaces() {
+  vault="$TMP_ROOT/My Drive/dream vault"
+  mkdir -p "$TMP_ROOT/My Drive"
+  make_vault "$vault"
+  mem="$TMP_ROOT/dream memories"
+  mkdir -p "$mem"
+  printf 'x\n' > "$mem/USER.md"
+  export VAULT_GIT_DIR="$vault.git" DREAM_MEMORIES="$mem"
+  bash "$SKILL_DIR/scripts/hermes/dream-commit.sh" begin "$vault" >/dev/null || fail "begin failed on a path with spaces"
+  printf '\n## 2026-10-18 — y\n' >> "$vault/Project/JOURNAL.md"
+  bash "$SKILL_DIR/scripts/hermes/dream-commit.sh" end "$vault" >/dev/null || fail "end failed on a path with spaces"
+  assert_contains "$(git --git-dir="$vault.git" log --format=%s -1)" "dream: $(date '+%Y-%m-%d')" "dream commit on a path with spaces"
+  unset VAULT_GIT_DIR DREAM_MEMORIES
+}
+
 test_dream_commit_refuses_without_history() {
   vault="$TMP_ROOT/dream-nohist"
   mkdir -p "$vault"
@@ -367,7 +382,7 @@ test_dream_prompt_keeps_its_safety_rules() {
   assert_contains "$d" "Never mark a \`confirmed\` entry superseded" "confirmed entries are not superseded"
   assert_contains "$d" "Do not create or edit skills" "no skill writing"
   assert_contains "$d" "First run: skip this step" "first run does not rebuild the digest"
-  assert_contains "$d" "{{COMMIT_WRAPPER}} begin" "commit wrapper brackets the run"
+  assert_contains "$d" "\"{{COMMIT_WRAPPER}}\" begin" "commit wrapper brackets the run"
   assert_contains "$d" "summaries skipped: check-current-state.sh not installed" "missing summary tool is skipped, not created"
   assert_contains "$d" "step 7 builds it only from vault entries, never from session text" "guidance is built from entries only"
   assert_contains "$d" "**Every bullet cites the entry behind it.**" "guidance bullets carry provenance"
@@ -378,6 +393,16 @@ test_dream_prompt_keeps_its_safety_rules() {
   assert_contains "$d" "is the run's log, not a message" "report is not delivered as a message"
   if grep -n "delivered to" "$SKILL_DIR/templates/DREAM.md"; then
     fail "DREAM.md must not assume the report is delivered to the owner"
+  fi
+  assert_contains "$d" "{{WRITE_PERMISSIONS}}" "vault write permissions travel inside the prompt"
+  assert_contains "$d" "restricted content omitted" "forbidden content is left out, not described"
+  assert_contains "$d" "-dream-{{HOST}}-2.md" "a second run the same day gets its own log"
+  assert_contains "$d" "Never overwrite a log" "logs are append-only"
+  assert_contains "$d" "puts
+\`-2\` before the unsuffixed log" "newest-log rule does not trust name order"
+  # Cloud-sync paths have spaces: every shell command must quote its placeholder paths.
+  if grep -oE '\`(bash|grep)[^\`]*\`' "$SKILL_DIR/templates/DREAM.md" | grep -E '(^|[^"/])\{\{(VAULT_PATH|COMMIT_WRAPPER)\}\}'; then
+    fail "DREAM.md shell commands must quote {{VAULT_PATH}} and {{COMMIT_WRAPPER}}"
   fi
   # Steps are referenced by number; a renumbering must not leave a dangling one.
   for n in $(grep -o 'step [0-9]' "$SKILL_DIR/templates/DREAM.md" | awk '{ print $2 }' | sort -u); do
@@ -449,6 +474,8 @@ test_upgrade_refuses_without_history_or_from_tools
 printf 'PASS: upgrade refuses unsafe runs\n'
 test_dream_commit_makes_one_commit_per_run
 printf 'PASS: dream wrapper makes one commit per run\n'
+test_dream_commit_handles_a_vault_path_with_spaces
+printf 'PASS: dream wrapper handles a vault path with spaces\n'
 test_dream_commit_refuses_without_history
 printf 'PASS: dream wrapper refuses without history\n'
 test_dream_prompt_keeps_its_safety_rules
