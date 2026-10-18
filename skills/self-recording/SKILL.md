@@ -258,15 +258,25 @@ The rules it encodes, and why:
 
 1. Copy the commit wrapper machine-locally — not into `_tools/` (pitfall 4d):
    `mkdir -p "$HERMES_HOME/scripts" && cp scripts/hermes/dream-commit.sh "$HERMES_HOME/scripts/"`
-2. Fill `templates/DREAM.md`. Caps come from `memory.user_char_limit` and
-   `memory.memory_char_limit` in `config.yaml` (defaults 1,375 and 2,200);
-   `{{SILENT_MARKER}}` is `[SILENT]`; `{{HOST}}` is `hostname -s`;
-   `{{GUIDANCE_CHAR_CAP}}` defaults to 4,000 and `{{FRICTION_WINDOW_DAYS}}` to 14;
-   `{{WRITE_PERMISSIONS}}` is the vault contract's own rules on what may be
-   stored (a scheduled run may not get the contract injected), or "none beyond
-   rule 7" if it has none. Keep the
-   filled copy in the vault (e.g. `_agent/DREAM.md`) as the versioned record —
-   the cron job stores its own copy, so re-create the job after editing it.
+2. Fill `templates/DREAM.md`. For Hermes:
+
+   | Placeholder | Value |
+   |---|---|
+   | `{{OWNER}}`, `{{VAULT_PATH}}`, `{{NOTES_DIR}}`, `{{LOW_TRUST_DIR}}` | as in the vault's `AGENTS.md` |
+   | `{{TODAY}}` | leave for the run: its local date, `date +%F` |
+   | `{{HARNESS}}` | `Hermes` |
+   | `{{HOST}}` | `hostname -s` |
+   | `{{COMMIT_WRAPPER}}` | `$HERMES_HOME/scripts/dream-commit.sh`, as an absolute path |
+   | `{{MEMORY_DIR}}` | `$HERMES_HOME/memories`, as an absolute path |
+   | `{{USER_CHAR_CAP}}`, `{{MEMORY_CHAR_CAP}}` | `memory.user_char_limit` and `memory.memory_char_limit` in `config.yaml` (defaults 1,375 and 2,200) |
+   | `{{MAX_WINDOW_DAYS}}` | 3, so a missed night is caught up without one huge run |
+   | `{{GUIDANCE_CHAR_CAP}}`, `{{FRICTION_WINDOW_DAYS}}` | 4,000 and 14 |
+   | `{{WRITE_PERMISSIONS}}` | the vault contract's own rules on what may be stored (a scheduled run may not get the contract injected), or "none beyond rule 7" |
+   | `{{SILENT_MARKER}}` | `[SILENT]` |
+
+   Keep the filled copy in the vault (e.g. `_agent/DREAM.md`) as the
+   versioned record — the cron job stores its own copy, so re-create the job
+   after editing it.
 3. **First run supervised.** Paste the filled prompt into a live session with
    the owner present. Its first run harvests digest-only memories into the
    vault and deliberately leaves the digest alone; the owner reviews the

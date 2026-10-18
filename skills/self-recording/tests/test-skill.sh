@@ -404,6 +404,11 @@ test_dream_prompt_keeps_its_safety_rules() {
   if grep -oE '\`(bash|grep)[^\`]*\`' "$SKILL_DIR/templates/DREAM.md" | grep -E '(^|[^"/])\{\{(VAULT_PATH|COMMIT_WRAPPER)\}\}'; then
     fail "DREAM.md shell commands must quote {{VAULT_PATH}} and {{COMMIT_WRAPPER}}"
   fi
+  # Every placeholder the job prompt uses must be explained where setup fills it.
+  for ph in $(grep -o '{{[A-Z_]*}}' "$SKILL_DIR/templates/DREAM.md" | sort -u); do
+    [ "$ph" = "{{PLACEHOLDER}}" ] && continue
+    grep -qF "$ph" "$SKILL_DIR/SKILL.md" || fail "SKILL.md does not explain $ph"
+  done
   # Steps are referenced by number; a renumbering must not leave a dangling one.
   for n in $(grep -o 'step [0-9]' "$SKILL_DIR/templates/DREAM.md" | awk '{ print $2 }' | sort -u); do
     grep -q "^### $n\. " "$SKILL_DIR/templates/DREAM.md" || fail "DREAM.md refers to missing step $n"

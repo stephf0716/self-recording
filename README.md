@@ -63,7 +63,8 @@ matches anyone else's.
 **Already have a vault from an earlier version?** Ask it to upgrade. It checks
 `_tools/` against every release, replaces only untouched copies, never
 overwrites your adapted `AGENTS.md` or journals, and commits once
-(`reference/upgrading.md`).
+(`reference/upgrading.md`). When it can't tell exactly which release built the
+vault, it reports the range and starts from the oldest.
 
 ## The idea
 
@@ -112,8 +113,12 @@ Nothing is gated, but nothing is disguised either.
   with the same name; only a top-level `JOURNAL.md` is live.
 - **Nightly consolidation (optional)** — a scheduled "dream" job (Hermes cron as
   the worked case) that journals what the day's sessions decided but never
-  recorded, refreshes stale summaries, and rebuilds the harness's own memory from
-  the vault. Never writes `confirmed`; one commit per night.
+  recorded, looking hardest at corrections and dismissed suggestions. It then
+  rewrites `_agent/GUIDANCE.md`, a short "how to work with you" file that every
+  agent reads at the start of every session, so a correction given to one agent
+  reaches all of them by morning. Every line in it cites the journal entry
+  behind it. It runs silently, never writes `confirmed`, and makes one commit
+  per night.
 
 ## Contents
 

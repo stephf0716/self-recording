@@ -327,9 +327,9 @@ become live again.
 
 ## 14. Nightly consolidation feeds on itself, and erases what it never saw
 
-Four ways an unattended consolidation job ("dream", `templates/DREAM.md`) goes
-wrong. Found in design review and Hermes's own documentation, not yet measured
-in a live vault:
+Ways an unattended consolidation job ("dream", `templates/DREAM.md`) goes
+wrong. The first four came from design review and Hermes's own documentation;
+the rest turned up in the first live install (Hermes, October 2026):
 
 - **Self-feeding.** Each scheduled run is itself a session. Without an
   exclusion, the next night consolidates the previous night's output and
@@ -346,6 +346,17 @@ in a live vault:
   scheduled run may not get the contract injected, so the untrusted-content rule
   must be in the job's own prompt. It also never creates skills, which would turn
   a stray instruction in a web page into something every later session obeys.
+- **The guidance file is the prize.** `_agent/GUIDANCE.md` is read by every
+  agent, every session, so one planted line there steers all of them. The job
+  builds it only from journal entries (which carry provenance), never from
+  session text, excludes `unverified`, and keeps it to how to work, never what
+  to do.
+- **A nightly chat message.** Left to choose, the agent delivered the report to
+  the owner's chat, which defeats a background job. Setup now sets delivery to
+  local; the report is a log.
+- **Same-day logs overwrite each other.** A supervised first run and the first
+  scheduled run can land on the same date. The second now takes a `-2` suffix,
+  and the newest-log rule orders by date then suffix, not by name.
 
 ---
 
@@ -359,7 +370,8 @@ fixed tools in `_tools/` — a vault built from 0.3.0 still had a
 
 **Fix:** `scripts/upgrade.sh` reports which tools are current, which are untouched
 copies of an older release (safe to replace), and which were edited locally
-(merge by hand); `--apply` replaces only the safe ones, stamps
+(merge by hand); when several releases ship identical tools it reports the
+range rather than guessing the newest; `--apply` replaces only the safe ones, stamps
 `_tools/.self-recording-version`, and commits once. Contract merges follow
 `reference/upgrading.md`, with the owner. Journals are not migrated; old entries
 stay as written.
