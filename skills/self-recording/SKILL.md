@@ -67,7 +67,8 @@ Don't scaffold yet. You need five answers, and they change the design:
 5. **How do they actually work?** Do they open a project folder and work inside it,
    or think in terms of one central notebook? Put memory where they already are —
    a design that requires them to go somewhere else to record something will be
-   abandoned.
+   abandoned. If that folder is also the working project, project-only skills go in
+   `.agents/skills/<name>/SKILL.md`; do not scaffold that directory by default.
 
 Then read `reference/design-decisions.md` and walk them through the four real
 forks. Recommend, don't survey — but state each tradeoff honestly.
