@@ -292,8 +292,9 @@ The rules it encodes, and why:
 5. If `memory.write_approval` is on, an unattended run cannot get its digest
    writes approved. Turn it off for this, or drop step 8 from the prompt.
 6. Several machines with Hermes: session history is per-machine, so each runs
-   its own job, staggered by an hour or more. Logs carry the host name and the
-   job greps before writing, so overlaps don't duplicate.
+   its own job, staggered by an hour or more. Logs carry the host name; each
+   job finds its window from its own host's logs only, and greps before
+   writing, so overlaps don't duplicate.
 7. Add the "Nightly consolidation" section from `templates/AGENTS.md` to the
    vault's contract, so live sessions know what dream entries are, plus the
    "read `_agent/GUIDANCE.md` next" paragraph near its top. In each pointer

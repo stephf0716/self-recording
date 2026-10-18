@@ -187,8 +187,9 @@ active hours so this is rare, and pass the warning on in the report rather than
 pretending the single-commit undo still holds.
 
 **Related:** the harness memory the job rebuilds (`$HERMES_HOME/memories/`) is
-outside the vault and its history. `begin` copies it to `memories/.dream-backup/`
-and keeps a week; that copy is its only undo.
+outside the vault and its history. `begin` copies it to `memories/.dream-backup/`,
+one directory per run so a same-day retry cannot overwrite the snapshot from
+before a bad rebuild, and keeps the last 7 runs; that copy is its only undo.
 
 ---
 

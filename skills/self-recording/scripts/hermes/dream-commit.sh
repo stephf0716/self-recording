@@ -19,9 +19,10 @@
 #          a single revert no longer undoes the whole night.
 #
 # begin also copies the harness memory files (default $HERMES_HOME/memories, or
-# DREAM_MEMORIES for a profile) to <that dir>/.dream-backup/YYYY-MM-DD/, keeping
-# the last 7. They live outside the vault and its history, and the job rebuilds
-# them, so this copy is their only undo.
+# DREAM_MEMORIES for a profile) to <that dir>/.dream-backup/YYYY-MM-DD-HHMMSS/,
+# one directory per run so a same-day retry never overwrites the snapshot from
+# before a bad rebuild, keeping the last 7 runs. They live outside the vault and
+# its history, and the job rebuilds them, so this copy is their only undo.
 #
 # History: detached at $HOME/<vault>-history.git (or VAULT_GIT_DIR), or a plain
 # .git inside the vault. Same default as hook-autocommit.sh.
@@ -59,7 +60,7 @@ if [ "$MODE" = "begin" ]; then
   fi
   MEM="${DREAM_MEMORIES:-${HERMES_HOME:-$HOME/.hermes}/memories}"
   if [ -d "$MEM" ]; then
-    b="$MEM/.dream-backup/$(date '+%Y-%m-%d')"
+    b="$MEM/.dream-backup/$(date '+%Y-%m-%d-%H%M%S')"
     mkdir -p "$b" && cp -p "$MEM"/*.md "$b"/ 2>/dev/null
     ls -1d "$MEM"/.dream-backup/*/ 2>/dev/null | sort | awk '{ a[NR] = $0 } END { for (i = 1; i <= NR - 7; i++) print a[i] }' | while IFS= read -r old; do rm -rf "$old"; done
     echo "backup: $b"
@@ -78,9 +79,20 @@ else
   echo "dream-commit: warning: no 'begin' recorded; committing anyway." >&2
 fi
 
+# Commits since begin that are not ours: a sweep or hook fired mid-run. Checked
+# even when the tree is clean -- a sweep may have captured every write.
+others=0
+[ -n "$start" ] && others="$(g rev-list --count "$start..HEAD" 2>/dev/null || echo 0)"
+warn_others() {
+  [ "$others" -gt 0 ] || return 0
+  echo "dream-commit: warning: $others other commit(s) landed during the run (a sweep or hook);" >&2
+  echo "              part of tonight's work may be in them. Full undo: revert $(g rev-parse --short "$start")..HEAD" >&2
+}
+
 n="$(dirty_count)"
 if [ "$n" -eq 0 ]; then
   echo "end: nothing to commit"
+  warn_others
   rm -f "$STATE"
   exit 0
 fi
@@ -90,13 +102,7 @@ g commit -q -m "dream: $day" \
   -m "Nightly consolidation, $n file(s): journal entries appended from recent sessions, superseded markers, regenerated Current state blocks, and the run log in _agent/sessions/. Revert this one commit to undo the night (the harness memory files live outside the vault; begin backed them up under memories/.dream-backup/)." \
   || { echo "dream-commit: commit failed" >&2; exit 1; }
 
-if [ -n "$start" ]; then
-  others="$(g rev-list --count "$start..HEAD~1" 2>/dev/null || echo 0)"
-  if [ "$others" -gt 0 ]; then
-    echo "dream-commit: warning: $others other commit(s) landed during the run (a sweep or hook);" >&2
-    echo "              part of tonight's work may be in them. Full undo: revert $(g rev-parse --short "$start")..HEAD" >&2
-  fi
-fi
+warn_others
 rm -f "$STATE"
 h="$(g log -1 --format=%h)"
 echo "end: $h dream: $day"

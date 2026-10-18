@@ -103,12 +103,16 @@ anything without history.
 
 ### 1. Find the window
 
-Find the newest `_agent/sessions/*-dream-*.md`: the latest date, and within
+Find this host's newest completed log: `_agent/sessions/*-dream-{{HOST}}*.md`
+whose last line starts `completed:`. Only this host's: other machines' logs
+sync here, but their sessions do not. Newest means the latest date, and within
 that date the highest suffix (`-dream-{{HOST}}.md` is a day's first run,
 `-dream-{{HOST}}-2.md` its second). Don't trust plain name order, which puts
-`-2` before the unsuffixed log, or file times, which sync rewrites. The window
-runs from that run to now, at most {{MAX_WINDOW_DAYS}} days back. **If there is none, this is the
-first run:** use the last 24 hours, and skip step 8 (see there).
+`-2` before the unsuffixed log, or file times, which sync rewrites. A log
+without the `completed:` line is a run that stopped partway; its window is
+retried. The window runs from that run to now, at most {{MAX_WINDOW_DAYS}} days
+back. **If there is none, this is the first run:** use the last 24 hours, and
+skip step 8 (see there).
 
 Skip every session that ran this procedure, scheduled or pasted in live, and
 other scheduled jobs. Consolidating your own output back in compounds it.
@@ -137,8 +141,10 @@ records it, in any wording, skip it. A session that journaled its own
 decisions is the normal case, not a gap.
 
 Then read the current digest files. Any line in them that no active vault
-entry backs (something saved live during the day) is a candidate too,
-`confidence: probable`. Otherwise step 8 erases it.
+entry backs (something saved live during the day) is a candidate too, or step
+8 erases it. The digest is a paraphrase, so the same rule holds: `probable`
+only if you find {{OWNER}}'s own words for it in a session, otherwise
+`unverified`.
 
 ### 3. Write the log, then the entries
 
@@ -277,7 +283,9 @@ nothing from a `sensitivity: internal` note.
 
 ### 9. Commit
 
-Run `bash "{{COMMIT_WRAPPER}}" end "{{VAULT_PATH}}"`. It makes the run's one
+Append `completed: <local time>` as the last line of tonight's log; the next
+run's window starts here only if it is there. Then run
+`bash "{{COMMIT_WRAPPER}}" end "{{VAULT_PATH}}"`. It makes the run's one
 commit, `dream: YYYY-MM-DD`, so the whole night reverts in one step. Pass on
 any warning it prints.
 

@@ -324,7 +324,7 @@ test_dream_commit_makes_one_commit_per_run() {
 
   printf 'hand edit\n' > "$vault/hand.md"
   bash "$w" begin "$vault" >/dev/null || fail "dream begin failed"
-  [ -f "$mem/.dream-backup/$(date '+%Y-%m-%d')/USER.md" ] || fail "begin should back up harness memory"
+  ls "$mem"/.dream-backup/"$(date '+%Y-%m-%d')"-*/USER.md >/dev/null 2>&1 || fail "begin should back up harness memory"
   printf '\n## 2026-10-18 — x\n' >> "$vault/Project/JOURNAL.md"
   mkdir -p "$vault/_agent/sessions" && printf 'log\n' > "$vault/_agent/sessions/d.md"
   out="$(bash "$w" end "$vault" 2>&1)" || fail "dream end failed"
@@ -347,6 +347,23 @@ test_dream_commit_makes_one_commit_per_run() {
 
   out="$(bash "$w" end "$vault" 2>&1)"
   assert_contains "$out" "nothing to commit" "clean tree makes no commit"
+
+  # A sweep that captures every write leaves a clean tree; end must still warn.
+  bash "$w" begin "$vault" >/dev/null
+  printf 'c\n' >> "$vault/Project/JOURNAL.md"
+  git --git-dir="$vault.git" add -A && git --git-dir="$vault.git" commit -qm "sweep: 1 file(s) changed"
+  out="$(bash "$w" end "$vault" 2>&1)"
+  assert_contains "$out" "nothing to commit" "sweep took every write"
+  assert_contains "$out" "1 other commit(s) landed during the run" "clean tree still reports the sweep"
+
+  # A same-day retry must not overwrite the earlier run's memory backup.
+  first="$(ls -1d "$mem"/.dream-backup/*/ | sort | head -1)"
+  printf 'bad rebuild\n' > "$mem/USER.md"
+  sleep 1
+  bash "$w" begin "$vault" >/dev/null
+  assert_contains "$(cat "$first/USER.md")" "Prefers terse replies" "earlier backup survives a retry"
+  [ "$(ls -1d "$mem"/.dream-backup/*/ | wc -l)" -le 7 ] || fail "backups beyond 7 runs should be pruned"
+  bash "$w" end "$vault" >/dev/null 2>&1
   unset VAULT_GIT_DIR DREAM_MEMORIES
 }
 
@@ -398,6 +415,12 @@ test_dream_prompt_keeps_its_safety_rules() {
   assert_contains "$d" "restricted content omitted" "forbidden content is left out, not described"
   assert_contains "$d" "-dream-{{HOST}}-2.md" "a second run the same day gets its own log"
   assert_contains "$d" "Never overwrite a log" "logs are append-only"
+  assert_contains "$d" "Only this host's" "window comes from this host's logs only"
+  assert_contains "$d" "Append \`completed: <local time>\`" "a finished run marks its log"
+  assert_contains "$d" "its window is
+retried" "a run that stopped partway is retried"
+  assert_contains "$d" "otherwise
+\`unverified\`" "digest-only lines need the owner's words to be probable"
   assert_contains "$d" "puts
 \`-2\` before the unsuffixed log" "newest-log rule does not trust name order"
   # Cloud-sync paths have spaces: every shell command must quote its placeholder paths.
