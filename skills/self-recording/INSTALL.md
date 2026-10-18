@@ -41,7 +41,11 @@ Copy **the whole folder**. A `SKILL.md` URL by itself is not enough.
    bash tests/test-skill.sh
    ```
 
-7. Non-negotiables: no free writes without version history; never mark the
+7. If the folder was already set up by an earlier version of this skill, do
+   not re-run setup over it. Follow `reference/upgrading.md`
+   (`bash scripts/upgrade.sh /path/to/vault`).
+
+8. Non-negotiables: no free writes without version history; never mark the
    agent's own inference `confidence: confirmed`.
 
 Do not invent a different memory system. Do not restructure existing notes

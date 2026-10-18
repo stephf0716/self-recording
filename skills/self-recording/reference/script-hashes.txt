@@ -1,0 +1,39 @@
+# Release manifest for the vault tools that live in <vault>/_tools/.
+#
+#   <skill version> <blob hash> <path relative to scripts/>
+#
+# Blob hash = `tr -d '\r' < FILE | git hash-object --stdin`, so a CRLF checkout
+# hashes the same as LF. scripts/upgrade.sh uses this to tell an untouched copy
+# from an older release (safe to replace) from a locally edited one (merge by
+# hand). Only paths listed for the CURRENT version are vault tools; anything
+# else under scripts/ (upgrade.sh, hermes/) is not copied into a vault.
+#
+# Releasing: append one row per vault tool for the new version.
+# tests/test-skill.sh fails if the current version's rows do not match scripts/.
+
+0.3.0 d58409f2647c99d1503a7143433eca092c303eae archive-project.sh
+0.3.0 301291f09627b95f83482998949a60e4c99096bf check-current-state.sh
+0.3.0 98b50c5e1b6ff76e553e842770246854b270a05f hook-autocommit.sh
+0.3.0 da9b37fc0f1c937d1caeeaf11342601349415864 install-autocommit-agent.sh
+0.3.0 0d0dc3bdf20a303f12f566b2b847f73b49fe3d42 install-hooks.sh
+0.3.0 976dc148ee47e3870a123b44ae31ac104290b79d launchd/autocommit.plist.template
+0.3.0 d56b93763cb4f33f819ae2d3cbaa38d0150dedeb new-project.sh
+0.3.0 2232eb38ca4a8a4f85ea3488580881a6a81094db setup-history.sh
+
+0.3.1 d58409f2647c99d1503a7143433eca092c303eae archive-project.sh
+0.3.1 3a625571d703b4046f459e67e4fd3e30f9364d73 check-current-state.sh
+0.3.1 98b50c5e1b6ff76e553e842770246854b270a05f hook-autocommit.sh
+0.3.1 da9b37fc0f1c937d1caeeaf11342601349415864 install-autocommit-agent.sh
+0.3.1 0d0dc3bdf20a303f12f566b2b847f73b49fe3d42 install-hooks.sh
+0.3.1 976dc148ee47e3870a123b44ae31ac104290b79d launchd/autocommit.plist.template
+0.3.1 860ce580c8b3f1fca625ab71ba2e3a0d59ed45fd new-project.sh
+0.3.1 2232eb38ca4a8a4f85ea3488580881a6a81094db setup-history.sh
+
+0.4.0 d58409f2647c99d1503a7143433eca092c303eae archive-project.sh
+0.4.0 3a625571d703b4046f459e67e4fd3e30f9364d73 check-current-state.sh
+0.4.0 98b50c5e1b6ff76e553e842770246854b270a05f hook-autocommit.sh
+0.4.0 da9b37fc0f1c937d1caeeaf11342601349415864 install-autocommit-agent.sh
+0.4.0 0d0dc3bdf20a303f12f566b2b847f73b49fe3d42 install-hooks.sh
+0.4.0 976dc148ee47e3870a123b44ae31ac104290b79d launchd/autocommit.plist.template
+0.4.0 860ce580c8b3f1fca625ab71ba2e3a0d59ed45fd new-project.sh
+0.4.0 2232eb38ca4a8a4f85ea3488580881a6a81094db setup-history.sh
