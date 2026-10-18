@@ -70,7 +70,7 @@ next time each block is regenerated.
 **Tools:** none changed. `--apply` writes the version stamp.
 
 **New, optional — nightly consolidation ("dream").** Not enabled by upgrading.
-If the owner wants it, follow SKILL.md Step 5, "Nightly consolidation",
+If the owner wants it, follow `reference/nightly-consolidation.md`,
 including the supervised first run. It adds:
 
 - `templates/DREAM.md` — the job prompt, filled in for this vault.

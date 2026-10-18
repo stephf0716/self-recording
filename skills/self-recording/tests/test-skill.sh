@@ -430,7 +430,7 @@ retried" "a run that stopped partway is retried"
   # Every placeholder the job prompt uses must be explained where setup fills it.
   for ph in $(grep -o '{{[A-Z_]*}}' "$SKILL_DIR/templates/DREAM.md" | sort -u); do
     [ "$ph" = "{{PLACEHOLDER}}" ] && continue
-    grep -qF "$ph" "$SKILL_DIR/SKILL.md" || fail "SKILL.md does not explain $ph"
+    grep -qF "$ph" "$SKILL_DIR/reference/nightly-consolidation.md" || fail "nightly-consolidation.md does not explain $ph"
   done
   # Steps are referenced by number; a renumbering must not leave a dangling one.
   for n in $(grep -o 'step [0-9]' "$SKILL_DIR/templates/DREAM.md" | awk '{ print $2 }' | sort -u); do
@@ -446,7 +446,7 @@ test_every_client_is_pointed_at_the_guidance() {
   assert_contains "$(cat "$SKILL_DIR/templates/AGENTS.md")" "Don't edit \`_agent/GUIDANCE.md\`; change the entries." "live sessions change entries, not guidance"
   grep -qx '@_agent/GUIDANCE.md' "$SKILL_DIR/templates/CLAUDE.md" || fail "CLAUDE.md must import the guidance"
   assert_contains "$(cat "$SKILL_DIR/templates/HERMES.md")" "_agent/GUIDANCE.md" "Hermes pointer names the guidance"
-  assert_contains "$(cat "$SKILL_DIR/SKILL.md")" "Set \`deliver\` and \`failure_deliver\` to local" "setup defaults to silent delivery"
+  assert_contains "$(cat "$SKILL_DIR/reference/nightly-consolidation.md")" "Set \`deliver\` and \`failure_deliver\` to local" "setup defaults to silent delivery"
 }
 
 test_skill_audit_grep_finds_confirmed_dream_entries() {
@@ -467,7 +467,7 @@ test_skill_audit_grep_finds_confirmed_dream_entries() {
 - **source:** dream `_agent/sessions/2026-10-17-dream-h.md`
 - **status:** active
 EOF
-  pattern="$(sed -n "s/^grep -rn -B1 '\(.*dream\)' --include=JOURNAL.md.*/\1/p" "$SKILL_DIR/SKILL.md")"
+  pattern="$(sed -n "s/^grep -rn -B1 '\(.*dream\)' --include=JOURNAL.md.*/\1/p" "$SKILL_DIR/reference/nightly-consolidation.md")"
   [ -n "$pattern" ] || fail "SKILL.md audit grep not found"
   hits="$(cd "$vault" && grep -rn -B1 "$pattern" --include=JOURNAL.md . | grep 'confidence:\*\* confirmed' || true)"
   [ "$(printf '%s\n' "$hits" | grep -c 'confidence')" -eq 1 ] || fail "audit grep should flag exactly the one confirmed dream entry: $hits"

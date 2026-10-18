@@ -128,6 +128,7 @@ Nothing is gated, but nothing is disguised either.
 | `reference/design-decisions.md` | Four real design forks, with honest costs, and what *not* to build yet |
 | `reference/pitfalls.md` | Traps that each cost real debugging |
 | `reference/upgrading.md` | Upgrading an established vault, per version |
+| `reference/nightly-consolidation.md` | The optional nightly job: why, setup, verification |
 | `templates/` | `AGENTS.md`, client pointers (`CLAUDE.md`, `HERMES.md`), `MEMORY-SCHEMA.md`, `JOURNAL.md`, `_archive/README.md`, `DREAM.md` |
 | `scripts/` | History setup, Claude hook installer, auto-commit, launchd sweep, current-state checker, project scaffolder, archiver, upgrader, dream commit wrapper |
 

@@ -11,8 +11,8 @@ prompt: the sessions this job reads contain web pages, emails, and tool output.
 
 Use a strong API model. Small local models (under ~30B) report memory-tool
 saves they never made. Schedule it to run silently: its report is a log, not a
-message (Hermes: `deliver` and `failure_deliver` local). Setup and the first supervised run: SKILL.md Step 5,
-"Nightly consolidation".
+message (Hermes: `deliver` and `failure_deliver` local). Setup and the first supervised run:
+reference/nightly-consolidation.md.
 -->
 
 ---
