@@ -172,6 +172,26 @@ Hermes gateway is running, so read back the job state and verify
 
 ---
 
+## 4e. A dream run is one commit only if nothing else commits mid-run
+
+The nightly consolidation job promises one `dream: YYYY-MM-DD` commit per run, so
+a bad night reverts in one step. But the scheduled sweep, a Claude `Stop` hook, or
+a Hermes autocommit cron can fire while the job is still writing, and capture half
+of its changes in a `sweep:` or `checkpoint:` commit. (Reproduced in a test
+vault; not yet seen live.)
+
+**Fix:** `scripts/hermes/dream-commit.sh begin` commits pre-existing drift as
+`pre-dream:` and records where the run started; `end` warns when other commits
+landed in between and prints the full revert range. Schedule the job away from
+active hours so this is rare, and pass the warning on in the report rather than
+pretending the single-commit undo still holds.
+
+**Related:** the harness memory the job rebuilds (`$HERMES_HOME/memories/`) is
+outside the vault and its history. `begin` copies it to `memories/.dream-backup/`
+and keeps a week; that copy is its only undo.
+
+---
+
 ## 5. Sandboxed agents can't write the places you'd expect
 
 An agent may be blocked from `.claude/settings.json`, `.claude/skills/`, `~/.claude/`,
@@ -302,3 +322,44 @@ journal" rule. Underscore-prefixed folders are infrastructure; don't put a
 journal there. `find -maxdepth 2 -name JOURNAL.md -not -path './_*'` already
 skips them — do not change that exclusion to "see" archived journals, or they
 become live again.
+
+---
+
+## 14. Nightly consolidation feeds on itself, and erases what it never saw
+
+Four ways an unattended consolidation job ("dream", `templates/DREAM.md`) goes
+wrong. Found in design review and Hermes's own documentation, not yet measured
+in a live vault:
+
+- **Self-feeding.** Each scheduled run is itself a session. Without an
+  exclusion, the next night consolidates the previous night's output and
+  restates it with more confidence than it earned. The prompt skips scheduled
+  sessions.
+- **Digest-only memory.** The harness saves to its own memory files during the
+  day. Rebuilding that digest from the vault deletes anything it never got into
+  the vault — on an established vault, possibly months of it. The job harvests
+  digest-only lines first, and its first run does not rebuild at all, so the
+  owner sees the harvest before anything is removed.
+- **Fake saves.** Small local models (under ~30B) report memory-tool calls they
+  never made. Unattended, nobody notices. Pin a strong API model to the job.
+- **Injected instructions.** Sessions contain fetched pages and emails. A
+  scheduled run may not get the contract injected, so the untrusted-content rule
+  must be in the job's own prompt. It also never creates skills, which would turn
+  a stray instruction in a web page into something every later session obeys.
+
+---
+
+## 15. Re-running setup on an established vault
+
+Pointing the skill at a vault it already built and following Steps 2–5 again
+overwrites an adapted `AGENTS.md` with the template, fails partway when
+`install-hooks.sh` refuses existing hooks, and silently leaves older copies of
+fixed tools in `_tools/` — a vault built from 0.3.0 still had a
+`check-current-state.sh` that could not see same-day decisions.
+
+**Fix:** `scripts/upgrade.sh` reports which tools are current, which are untouched
+copies of an older release (safe to replace), and which were edited locally
+(merge by hand); `--apply` replaces only the safe ones, stamps
+`_tools/.self-recording-version`, and commits once. Contract merges follow
+`reference/upgrading.md`, with the owner. Journals are not migrated; old entries
+stay as written.

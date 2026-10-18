@@ -1,7 +1,7 @@
 ---
 name: self-recording
-description: Set up a Markdown folder as durable, portable AI memory that records itself while you work — project journals, provenance metadata, git-backed undo, and auto-commit hooks. Use when someone wants their notes or project folder to become memory an AI reads and writes across sessions and clients, wants to stop re-explaining context to every new chat, wants AI-written notes kept distinguishable from their own, or asks to replicate an "Obsidian as AI memory" / "AGENTS.md vault" setup. Also use to audit or repair an existing one.
-version: 0.3.1
+description: Set up a Markdown folder as durable, portable AI memory that records itself while you work — project journals, provenance metadata, git-backed undo, and auto-commit hooks. Use when someone wants their notes or project folder to become memory an AI reads and writes across sessions and clients, wants to stop re-explaining context to every new chat, wants AI-written notes kept distinguishable from their own, or asks to replicate an "Obsidian as AI memory" / "AGENTS.md vault" setup. Also use to audit, repair, or upgrade an existing one.
+version: 0.4.0
 license: MIT
 ---
 
@@ -32,6 +32,22 @@ corrupts the thing it was meant to preserve.
 The second non-negotiable: **agents may never mark their own inferences as
 confirmed.** One reserved metadata value is what keeps "what I know" separable from
 "what a model guessed" when nothing is gated. Every other rule here is negotiable.
+
+## Already built? Upgrade, don't rebuild
+
+If the folder already has this system (`_tools/hook-autocommit.sh`, journals
+with a `## Current state` block, an `AGENTS.md` that says to record as you
+work), **do not run Steps 2–5 over it.** Its contract was adapted for this
+person and its tools may have been edited. Follow `reference/upgrading.md`:
+
+```bash
+bash scripts/upgrade.sh /path/to/vault           # report; changes nothing
+bash scripts/upgrade.sh /path/to/vault --apply   # replace untouched tools, stamp, commit
+```
+
+It replaces only tools identical to an older release, never contract files or
+journals, and makes one revertible commit. Contract changes are merged by hand,
+section by section, with the owner. New features are offered, never switched on.
 
 ## Step 1 — Interview before building
 
@@ -193,6 +209,73 @@ reviewed, file-scoped checkpoint workflow. If the vault is under
 for `/bin/bash`; the installer detects the failure and prints the steps. That
 grant is broad — say so. See `reference/pitfalls.md` 4a and 4b.
 
+**Finally, stamp the version** so a later upgrade knows what it is looking at:
+
+```bash
+bash scripts/upgrade.sh /path/to/vault --apply   # on a new vault: writes the stamp, commits
+```
+
+### Nightly consolidation ("dream") — optional
+
+A scheduled job that reads the day's sessions, appends the decisions,
+preferences, and lessons nobody journaled, refreshes stale `## Current state`
+blocks, flags due `review_after` dates, and rebuilds the harness's own small
+memory from the vault. Offer it once the contract works and history is
+automated, not before. The prompt is `templates/DREAM.md`; it is
+harness-neutral, with Hermes as the worked case.
+
+The rules it encodes, and why:
+
+- **The vault stays authoritative.** Harness memory (Hermes `USER.md` /
+  `MEMORY.md`) becomes a digest rebuilt from the journals each night — derived,
+  so rebuildable, so never a second source of truth.
+- **It never writes `confirmed`.** It reads transcripts; it was not told
+  anything. Promotion is the owner's, in a live session.
+- **Append-only, one commit per run** (`dream: YYYY-MM-DD`), so a bad night is
+  one revert.
+- **The untrusted-content rule is in the prompt itself.** Sessions contain web
+  pages and emails, and a scheduled run may not get the contract injected.
+
+**Hermes setup:**
+
+1. Copy the commit wrapper machine-locally — not into `_tools/` (pitfall 4d):
+   `mkdir -p "$HERMES_HOME/scripts" && cp scripts/hermes/dream-commit.sh "$HERMES_HOME/scripts/"`
+2. Fill `templates/DREAM.md`. Caps come from `memory.user_char_limit` and
+   `memory.memory_char_limit` in `config.yaml` (defaults 1,375 and 2,200);
+   `{{SILENT_MARKER}}` is `[SILENT]`; `{{HOST}}` is `hostname -s`. Keep the
+   filled copy in the vault (e.g. `_agent/DREAM.md`) as the versioned record —
+   the cron job stores its own copy, so re-create the job after editing it.
+3. **First run supervised.** Paste the filled prompt into a live session with
+   the owner present. Its first run harvests digest-only memories into the
+   vault and deliberately leaves the digest alone; the owner reviews the
+   harvest before any rebuild. On an established vault this is the run that
+   matters — months of memory may exist only in `USER.md`.
+4. Create the job on the **gateway's** cron (`hermes cron create`, or ask
+   Hermes in chat), pinned to a strong API model with `--model`. Not a second
+   process on the same `HERMES_HOME`; two writers corrupt each other's memory.
+   Read the job back and confirm the gateway is running — agent jobs are
+   skipped without it.
+5. If `memory.write_approval` is on, an unattended run cannot get its digest
+   writes approved. Turn it off for this, or drop step 7 from the prompt.
+6. Several machines with Hermes: session history is per-machine, so each runs
+   its own job, staggered by an hour or more. Logs carry the host name and the
+   job greps before writing, so overlaps don't duplicate.
+7. Add the "Nightly consolidation" section from `templates/AGENTS.md` to the
+   vault's contract, so live sessions know what dream entries are.
+
+It does not create or edit Agent Skills. A repeated workflow becomes a
+`procedure` entry and a line in the report; skill-making stays with Hermes's own
+loop. Skills are instructions every later session obeys, and they live outside
+vault history — an unattended job writing them from untrusted session text has
+no undo.
+
+Verify after the first scheduled run:
+
+```bash
+_tools/vgit log --oneline -3     # a dream: commit, possibly after a pre-dream:
+grep -rn -B1 '\*\*source:\*\* dream' --include=JOURNAL.md . | grep 'confidence:\*\* confirmed'   # expect nothing
+```
+
 ## Step 6 — Verify, with real work
 
 Synthetic tests measure compliance, not judgment. Telling an agent "record this in
@@ -247,21 +330,29 @@ What makes it survivable, and worth saying plainly:
   lifecycle recovery and scheduled sweeps may group changes differently.
 - `confidence: probable` is greppable, so an audit is possible whenever they want.
 
+A nightly consolidation job, if enabled, adds a second unattended writer: one
+that reads transcripts rather than taking part in them. Its entries are
+`probable` or `unverified`, cite a dream log, and revert as one commit — but it
+will sometimes record a passing remark as a preference.
+
 They bought frictionlessness with accumulated noise. That's usually the right trade
 — but it's their trade to make knowingly.
 
 ## Reference
 
 - `reference/design-decisions.md` — the four forks, with tradeoffs and recommendations
+- `reference/upgrading.md` — upgrading an established vault, per version
+- `reference/script-hashes.txt` — release manifest `upgrade.sh` checks tools against
 - `reference/pitfalls.md` — traps that cost real debugging: cloud sync vs `.git`,
   line-ending churn, silent hook failure, `SessionEnd` not firing, sandboxed clients
   that can't commit, Full Disk Access for launchd, stale contract files, journals
-  outgrowing context
+  outgrowing context, nightly consolidation, upgrading over an adapted contract
 - `templates/` — `AGENTS.md`, `CLAUDE.md`, `HERMES.md` (→ `.hermes.md`),
-  `MEMORY-SCHEMA.md`, `JOURNAL.md`, `_archive/README.md`
+  `MEMORY-SCHEMA.md`, `JOURNAL.md`, `_archive/README.md`, `DREAM.md`
 - `scripts/` — `setup-history.sh`, `install-hooks.sh`, `hook-autocommit.sh`,
   `install-autocommit-agent.sh` + `launchd/`, `check-current-state.sh`,
-  `new-project.sh`, `archive-project.sh`, `vgit`
+  `new-project.sh`, `archive-project.sh`, `vgit` (vault tools); `upgrade.sh`
+  (runs from the skill); `hermes/dream-commit.sh` (goes in `$HERMES_HOME/scripts`)
 
 ## Adapting, not copying
 

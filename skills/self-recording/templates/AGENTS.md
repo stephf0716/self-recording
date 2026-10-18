@@ -237,3 +237,20 @@ dir is outside it by design. `vgit log` works; `vgit commit` fails with
 while you are editing from such a client, the sweep is not running — tell
 {{OWNER}}, and be conservative with edits to existing files until it is. Install
 it (macOS, from a terminal): `bash _tools/install-autocommit-agent.sh`.
+
+## Nightly consolidation (only if enabled — delete this section otherwise)
+
+A scheduled job ({{DREAM_SCHEDULE — e.g. "Hermes cron, 03:10"}}) reads the
+day's sessions and appends whatever was decided but never journaled. Its
+entries cite `source: dream _agent/sessions/YYYY-MM-DD-dream-<host>.md`, and
+each run is one `dream: YYYY-MM-DD` commit.
+
+- **You still record as you work.** The job is a net for what sessions miss,
+  not a reason to skip an entry.
+- Its entries are never `confirmed`. When {{OWNER}} confirms one in
+  conversation, change that entry's `confidence:` to `confirmed` and say so in
+  the body. That edit is theirs to make through you, not the job's.
+- {{HARNESS_MEMORY — e.g. "Hermes USER.md and MEMORY.md"}} is a digest the job
+  rebuilds from this vault each night. Record durable things here, not only
+  there: the job salvages digest-only lines as `probable` at best, then
+  rewrites the digest.

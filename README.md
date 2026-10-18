@@ -60,6 +60,11 @@ my AI remembers between sessions."
 **It interviews you before building anything.** It does not assume your setup
 matches anyone else's.
 
+**Already have a vault from an earlier version?** Ask it to upgrade. It checks
+`_tools/` against every release, replaces only untouched copies, never
+overwrites your adapted `AGENTS.md` or journals, and commits once
+(`reference/upgrading.md`).
+
 ## The idea
 
 Durable memory lives in Markdown you own. Swap Claude for Copilot for Hermes
@@ -105,6 +110,10 @@ Nothing is gated, but nothing is disguised either.
   unreviewable a year later.
 - **Project archive** — move an inactive project to `_archive/<Folder-Name>/`
   with the same name; only a top-level `JOURNAL.md` is live.
+- **Nightly consolidation (optional)** — a scheduled "dream" job (Hermes cron as
+  the worked case) that journals what the day's sessions decided but never
+  recorded, refreshes stale summaries, and rebuilds the harness's own memory from
+  the vault. Never writes `confirmed`; one commit per night.
 
 ## Contents
 
@@ -113,8 +122,9 @@ Nothing is gated, but nothing is disguised either.
 | `skills/self-recording/SKILL.md` | The workflow: interview → decide → history → contract → automate → verify |
 | `reference/design-decisions.md` | Four real design forks, with honest costs, and what *not* to build yet |
 | `reference/pitfalls.md` | Traps that each cost real debugging |
-| `templates/` | `AGENTS.md`, client pointers (`CLAUDE.md`, `HERMES.md`), `MEMORY-SCHEMA.md`, `JOURNAL.md`, `_archive/README.md` |
-| `scripts/` | History setup, Claude hook installer, auto-commit, launchd sweep, current-state checker, project scaffolder, archiver |
+| `reference/upgrading.md` | Upgrading an established vault, per version |
+| `templates/` | `AGENTS.md`, client pointers (`CLAUDE.md`, `HERMES.md`), `MEMORY-SCHEMA.md`, `JOURNAL.md`, `_archive/README.md`, `DREAM.md` |
+| `scripts/` | History setup, Claude hook installer, auto-commit, launchd sweep, current-state checker, project scaffolder, archiver, upgrader, dream commit wrapper |
 
 `reference/pitfalls.md` is worth reading even if you let the AI drive.
 
@@ -135,5 +145,5 @@ bash skills/self-recording/tests/test-skill.sh
 
 ## Status and licensing
 
-Version 0.3.1. MIT. Built from a working setup rather than designed in the
+Version 0.4.0. MIT. Built from a working setup rather than designed in the
 abstract — every item in `pitfalls.md` cost real debugging time.
