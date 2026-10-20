@@ -55,7 +55,7 @@ them: `pitfalls.md` 4e and 14.
    harvest before any rebuild. On an established vault this is the run that
    matters — months of memory may exist only in `USER.md`.
 4. Create the job on the **gateway's** cron (`hermes cron create`, or ask
-   Hermes in chat), pinned to a strong API model with `--model`. Not a second
+   Hermes in chat). Not a second
    process on the same `HERMES_HOME`; two writers corrupt each other's memory.
    Read the job back and confirm the gateway is running — agent jobs are
    skipped without it. Set `deliver` and `failure_deliver` to local: the job

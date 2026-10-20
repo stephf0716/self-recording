@@ -341,8 +341,6 @@ the rest turned up in the first live install (Hermes, October 2026):
   the vault — on an established vault, possibly months of it. The job harvests
   digest-only lines first, and its first run does not rebuild at all, so the
   owner sees the harvest before anything is removed.
-- **Fake saves.** Small local models (under ~30B) report memory-tool calls they
-  never made. Unattended, nobody notices. Pin a strong API model to the job.
 - **Injected instructions.** Sessions contain fetched pages and emails. A
   scheduled run may not get the contract injected, so the untrusted-content rule
   must be in the job's own prompt. It also never creates skills, which would turn
