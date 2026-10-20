@@ -109,7 +109,7 @@ that date the highest suffix (`-dream-{{HOST}}.md` is a day's first run,
 `-dream-{{HOST}}-2.md` its second). Don't trust plain name order, which puts
 `-2` before the unsuffixed log, or file times, which sync rewrites. A log
 without the `completed:` line is a run that stopped partway; its window is
-retried. The window runs from that run to now, at most {{MAX_WINDOW_DAYS}} days
+retried. The window runs from that log's `completed:` time to now, at most {{MAX_WINDOW_DAYS}} days
 back. **If there is none, this is the first run:** use the last 24 hours, and
 skip step 8 (see there).
 
@@ -282,8 +282,10 @@ nothing from a `sensitivity: internal` note.
 
 ### 9. Commit
 
-Append `completed: <local time>` as the last line of tonight's log; the next
-run's window starts here only if it is there. Then run
+Run `date '+%F %H:%M %Z'` and append its output as the log's last line,
+`completed: <that output>`. Read the clock; never write a time you did not
+get from it. The next run's window starts at that time, and only if the line
+is there. Then run
 `bash "{{COMMIT_WRAPPER}}" end "{{VAULT_PATH}}"`. It makes the run's one
 commit, `dream: YYYY-MM-DD`, so the whole night reverts in one step. Pass on
 any warning it prints.

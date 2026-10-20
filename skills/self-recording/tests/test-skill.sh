@@ -416,7 +416,8 @@ test_dream_prompt_keeps_its_safety_rules() {
   assert_contains "$d" "-dream-{{HOST}}-2.md" "a second run the same day gets its own log"
   assert_contains "$d" "Never overwrite a log" "logs are append-only"
   assert_contains "$d" "Only this host's" "window comes from this host's logs only"
-  assert_contains "$d" "Append \`completed: <local time>\`" "a finished run marks its log"
+  assert_contains "$d" "\`completed: <that output>\`" "a finished run marks its log"
+  assert_contains "$d" "Read the clock; never write a time you did not" "completed time comes from date, not the model"
   assert_contains "$d" "its window is
 retried" "a run that stopped partway is retried"
   assert_contains "$d" "otherwise
