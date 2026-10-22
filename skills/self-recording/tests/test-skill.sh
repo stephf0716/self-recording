@@ -295,6 +295,41 @@ $lo --" "merge list starts at the oldest candidate"
     "upgrade: self-recording $lo..$hi -> $(skill_version)" "commit names the range"
 }
 
+test_upgrade_refuses_another_vaults_history() {
+  live="$TMP_ROOT/live/Vault"
+  mkdir -p "$TMP_ROOT/live"
+  make_vault "$live"
+  copy="$TMP_ROOT/scratch/Vault"
+  mkdir -p "$TMP_ROOT/scratch"
+  cp -R "$live" "$copy"
+  printf 'live drift\n' > "$live/drift.md"
+  before="$(git --git-dir="$live.git" rev-parse HEAD)"
+  set +e
+  out="$(VAULT_GIT_DIR="$live.git" bash "$SKILL_DIR/scripts/upgrade.sh" "$copy" --apply 2>&1)"
+  status=$?
+  set -e
+  [ "$status" -ne 0 ] || fail "--apply must refuse a history whose worktree is another vault"
+  assert_contains "$out" "is the history of" "explains the mismatched history"
+  [ "$(git --git-dir="$live.git" rev-parse HEAD)" = "$before" ] || fail "live vault history must not get a commit"
+  [ ! -f "$copy/_tools/.self-recording-version" ] || fail "copy must not be stamped"
+}
+
+test_upgrade_handles_special_characters_and_staging_failure() {
+  vault="$TMP_ROOT/R&D | notes"
+  make_vault "$vault"
+  out="$(VAULT_GIT_DIR="$vault.git" bash "$SKILL_DIR/scripts/upgrade.sh" "$vault")"
+  assert_contains "$out" "1 journal(s) use date-only markers" "journals found under a path with & and |"
+
+  : > "$vault.git/index.lock"
+  set +e
+  out="$(VAULT_GIT_DIR="$vault.git" bash "$SKILL_DIR/scripts/upgrade.sh" "$vault" --apply 2>&1)"
+  status=$?
+  set -e
+  rm -f "$vault.git/index.lock"
+  [ "$status" -ne 0 ] || fail "--apply must fail when staging fails"
+  assert_contains "$out" "NOT committed" "says the upgrade is uncommitted"
+}
+
 test_upgrade_refuses_without_history_or_from_tools() {
   vault="$TMP_ROOT/no-history"
   mkdir -p "$vault/_tools"
@@ -339,3 +374,7 @@ test_upgrade_reports_ambiguous_version_as_a_range
 printf 'PASS: upgrade reports an ambiguous version as a range\n'
 test_upgrade_refuses_without_history_or_from_tools
 printf 'PASS: upgrade refuses unsafe runs\n'
+test_upgrade_refuses_another_vaults_history
+printf "PASS: upgrade refuses another vault's history\n"
+test_upgrade_handles_special_characters_and_staging_failure
+printf 'PASS: upgrade handles & and | in paths, and staging failure\n'

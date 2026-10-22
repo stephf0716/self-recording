@@ -133,7 +133,7 @@ while IFS= read -r j; do
   elif grep -qE '<!-- current-state: [0-9-]{10} -->' "$j"; then legacy=$((legacy + 1))
   else nomarker=$((nomarker + 1)); fi
 done <<EOF
-$(cd "$VAULT" && find . -maxdepth 2 -name JOURNAL.md -not -path './_*' | sort | sed "s|^\.|$VAULT|")
+$(cd "$VAULT" && find . -maxdepth 2 -name JOURNAL.md -not -path './_*' | sort | while IFS= read -r r; do printf '%s/%s\n' "$VAULT" "${r#./}"; done)
 EOF
 [ "$legacy" -gt 0 ] && echo "  note: $legacy journal(s) use date-only markers; they upgrade when next regenerated."
 [ "$nomarker" -gt 0 ] && echo "  note: $nomarker journal(s) have no Current state block; add one only if the owner wants it."
@@ -165,7 +165,16 @@ else
     echo "ERROR: no version history ($GIT_DIR_PATH). Set it up first:" >&2
     echo "       bash $SKILL_DIR/scripts/setup-history.sh $VAULT" >&2
     exit 1; }
-  g() { git --git-dir="$GIT_DIR_PATH" "$@"; }
+  g() { git --git-dir="$GIT_DIR_PATH" --work-tree="$VAULT" "$@"; }
+  # The default history path uses only the vault's basename, and its
+  # core.worktree points at the vault it was made for. Upgrading a copy with
+  # the same name would write tools here but stage and commit the original.
+  wt="$(g config --get core.worktree)"
+  if [ -n "$wt" ] && [ "$(cd "$wt" 2>/dev/null && pwd -P)" != "$(cd "$VAULT" && pwd -P)" ]; then
+    echo "ERROR: $GIT_DIR_PATH is the history of $wt, not of $VAULT." >&2
+    echo "       Set VAULT_GIT_DIR to this vault's own history, or set one up first." >&2
+    exit 1
+  fi
 fi
 
 if [ -n "$(g status --porcelain -uall)" ]; then
@@ -174,6 +183,8 @@ if [ -n "$(g status --porcelain -uall)" ]; then
     -m "Drift already in the vault, committed separately so the upgrade commit holds only the upgrade." \
     || { echo "ERROR: could not commit existing changes." >&2; exit 1; }
 fi
+
+start="$(g rev-parse HEAD 2>/dev/null)"
 
 replaced=""
 while IFS= read -r t; do
@@ -190,7 +201,10 @@ EOF
 mkdir -p "$TOOLS"
 printf '%s\n' "$CURRENT" > "$STAMP_FILE"
 
-g add -A
+g add -A || {
+  echo "ERROR: could not stage the upgrade (is another git process running?)." >&2
+  echo "       Tools and the stamp are written but NOT committed; commit them before anything else." >&2
+  exit 1; }
 if ! g diff --cached --quiet; then
   g commit -q -m "upgrade: self-recording $FROM_LABEL -> $CURRENT" \
     -m "Replaced (untouched copies of an older release):
@@ -201,6 +215,12 @@ per reference/upgrading.md, in a separate commit." \
   echo
   echo "Committed: $(g log -1 --format='%h %s')"
   echo "Undo:      _tools/vgit revert $(g log -1 --format=%h)   (plain git if the vault has .git)"
+  # A sweep or hook may have committed part of the upgrade in between.
+  others="$(g rev-list --count "$start..HEAD~1" 2>/dev/null || echo 0)"
+  if [ -n "$start" ] && [ "$others" -gt 0 ]; then
+    echo "WARNING: $others other commit(s) landed during the upgrade (a sweep or hook);" >&2
+    echo "         part of it may be in them. Full undo: revert $(g rev-parse --short "$start")..HEAD" >&2
+  fi
 else
   echo
   echo "Nothing to commit; already current."
