@@ -13,6 +13,7 @@
 #   UPDATE    identical to an older release -- untouched, safe to replace
 #   MODIFIED  matches no release -- edited locally; merge by hand, never replaced
 #   ABSENT    not installed -- left alone; install only what this machine runs
+#   LINKED    a symlink -- never replaced; the copy would land outside the vault
 #
 # --apply replaces UPDATE files only, writes _tools/.self-recording-version, and
 # makes one commit, "upgrade: self-recording FROM -> TO", after committing any
@@ -63,6 +64,12 @@ versions_with() {
 echo "Skill:  $SKILL_DIR ($CURRENT)"
 echo "Vault:  $VAULT"
 
+# A linked _tools/ or stamp would send writes outside the vault and its history.
+if [ -L "$TOOLS" ] || [ -L "$STAMP_FILE" ]; then
+  echo "ERROR: $TOOLS or its version stamp is a symlink; copy the real files in first." >&2
+  exit 1
+fi
+
 STAMPED=""
 [ -f "$STAMP_FILE" ] && STAMPED="$(tr -d '\r\n ' < "$STAMP_FILE")"
 
@@ -72,6 +79,11 @@ MODIFIED=0
 while IFS= read -r t; do
   src="$SKILL_DIR/scripts/$t"
   dst="$TOOLS/$t"
+  if [ -L "$dst" ] || [ -L "$(dirname "$dst")" ]; then
+    printf '  LINKED    %s -- a symlink; never replaced (history cannot restore its target)\n' "$t"
+    MODIFIED=$((MODIFIED + 1))
+    continue
+  fi
   if [ ! -f "$dst" ]; then
     printf '  ABSENT    %s\n' "$t"
     continue

@@ -342,6 +342,36 @@ test_upgrade_refuses_an_unreadable_history() {
   [ ! -f "$vault/_tools/.self-recording-version" ] || fail "no stamp without a readable history"
 }
 
+test_upgrade_never_writes_through_symlinks() {
+  vault="$TMP_ROOT/linked"
+  make_vault "$vault"
+  shared="$TMP_ROOT/shared-tools"
+  mkdir -p "$shared"
+  printf '# older shared copy\n' > "$shared/check-current-state.sh"
+  rm "$vault/_tools/check-current-state.sh"
+  ln -s "$shared/check-current-state.sh" "$vault/_tools/check-current-state.sh"
+  # Register the shared copy as an older release, so without the guard it is UPDATE.
+  skill="$TMP_ROOT/linked-skill"
+  cp -R "$SKILL_DIR" "$skill"
+  printf '0.0.1 %s check-current-state.sh\n' "$(blob "$shared/check-current-state.sh")" > "$skill/reference/m.tmp"
+  cat "$skill/reference/script-hashes.txt" >> "$skill/reference/m.tmp"
+  mv "$skill/reference/m.tmp" "$skill/reference/script-hashes.txt"
+  out="$(VAULT_GIT_DIR="$vault.git" bash "$skill/scripts/upgrade.sh" "$vault" --apply 2>&1)" || fail "apply failed: $out"
+  assert_contains "$out" "LINKED    check-current-state.sh" "symlinked tool is reported, not replaced"
+  [ "$(cat "$shared/check-current-state.sh")" = "# older shared copy" ] || fail "upgrade must not write through a symlinked tool"
+
+  vault2="$TMP_ROOT/linked-dir"
+  make_vault "$vault2"
+  mv "$vault2/_tools" "$TMP_ROOT/real-tools"
+  ln -s "$TMP_ROOT/real-tools" "$vault2/_tools"
+  set +e
+  out="$(VAULT_GIT_DIR="$vault2.git" bash "$SKILL_DIR/scripts/upgrade.sh" "$vault2" --apply 2>&1)"
+  status=$?
+  set -e
+  [ "$status" -ne 0 ] || fail "a symlinked _tools/ must be refused"
+  [ ! -f "$TMP_ROOT/real-tools/.self-recording-version" ] || fail "no stamp written through a symlinked _tools/"
+}
+
 test_upgrade_refuses_without_history_or_from_tools() {
   vault="$TMP_ROOT/no-history"
   mkdir -p "$vault/_tools"
@@ -392,3 +422,5 @@ test_upgrade_refuses_an_unreadable_history
 printf 'PASS: upgrade refuses an unreadable history\n'
 test_upgrade_handles_special_characters_and_staging_failure
 printf 'PASS: upgrade handles & and | in paths, and staging failure\n'
+test_upgrade_never_writes_through_symlinks
+printf 'PASS: upgrade never writes through symlinks\n'
