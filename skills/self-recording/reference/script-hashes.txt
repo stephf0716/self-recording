@@ -37,3 +37,11 @@
 0.4.0 976dc148ee47e3870a123b44ae31ac104290b79d launchd/autocommit.plist.template
 0.4.0 860ce580c8b3f1fca625ab71ba2e3a0d59ed45fd new-project.sh
 0.4.0 2232eb38ca4a8a4f85ea3488580881a6a81094db setup-history.sh
+0.5.0 d58409f2647c99d1503a7143433eca092c303eae archive-project.sh
+0.5.0 3a625571d703b4046f459e67e4fd3e30f9364d73 check-current-state.sh
+0.5.0 98b50c5e1b6ff76e553e842770246854b270a05f hook-autocommit.sh
+0.5.0 da9b37fc0f1c937d1caeeaf11342601349415864 install-autocommit-agent.sh
+0.5.0 0d0dc3bdf20a303f12f566b2b847f73b49fe3d42 install-hooks.sh
+0.5.0 976dc148ee47e3870a123b44ae31ac104290b79d launchd/autocommit.plist.template
+0.5.0 860ce580c8b3f1fca625ab71ba2e3a0d59ed45fd new-project.sh
+0.5.0 2232eb38ca4a8a4f85ea3488580881a6a81094db setup-history.sh

@@ -1,7 +1,7 @@
 ---
 name: self-recording
 description: Set up a Markdown folder as durable, portable AI memory that records itself while you work — project journals, provenance metadata, git-backed undo, and auto-commit hooks. Use when someone wants their notes or project folder to become memory an AI reads and writes across sessions and clients, wants to stop re-explaining context to every new chat, wants AI-written notes kept distinguishable from their own, or asks to replicate an "Obsidian as AI memory" / "AGENTS.md vault" setup. Also use to audit, repair, or upgrade an existing one.
-version: 0.4.0
+version: 0.5.0
 license: MIT
 ---
 
@@ -291,12 +291,12 @@ They bought frictionlessness with accumulated noise. That's usually the right tr
 
 - `reference/design-decisions.md` — the four forks, with tradeoffs and recommendations
 - `reference/upgrading.md` — upgrading an established vault, per version
-- `reference/nightly-consolidation.md` — the optional dream job: why, Hermes setup, verification
 - `reference/script-hashes.txt` — release manifest `upgrade.sh` checks tools against
+- `reference/nightly-consolidation.md` — the optional dream job: why, Hermes setup, verification
 - `reference/pitfalls.md` — traps that cost real debugging: cloud sync vs `.git`,
   line-ending churn, silent hook failure, `SessionEnd` not firing, sandboxed clients
   that can't commit, Full Disk Access for launchd, stale contract files, journals
-  outgrowing context, nightly consolidation, upgrading over an adapted contract
+  outgrowing context, upgrading over an adapted contract, nightly consolidation
 - `templates/` — `AGENTS.md`, `CLAUDE.md`, `HERMES.md` (→ `.hermes.md`),
   `MEMORY-SCHEMA.md`, `JOURNAL.md`, `_archive/README.md`, `DREAM.md`
 - `scripts/` — `setup-history.sh`, `install-hooks.sh`, `hook-autocommit.sh`,

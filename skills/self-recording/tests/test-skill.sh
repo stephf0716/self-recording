@@ -187,7 +187,7 @@ export GIT_COMMITTER_NAME=test GIT_COMMITTER_EMAIL=test@example.invalid
 
 blob() { tr -d '\r' < "$1" | git hash-object --stdin; }
 
-skill_version() { sed -n 's/^version:[[:space:]]*//p' "$SKILL_DIR/SKILL.md" | head -1; }
+skill_version() { tr -d '\r' < "$SKILL_DIR/SKILL.md" | sed -n 's/^version:[[:space:]]*//p' | head -1; }
 
 # A vault with every current vault tool in _tools/ and detached history.
 make_vault() {
@@ -243,7 +243,9 @@ test_upgrade_replaces_only_untouched_tools() {
   assert_contains "$report" "UPDATE    check-current-state.sh (matches 0.0.1)" "older untouched tool is UPDATE"
   assert_contains "$report" "MODIFIED  install-hooks.sh" "edited tool is MODIFIED"
   assert_contains "$report" "OK        hook-autocommit.sh" "current tool is OK"
-  assert_contains "$report" "Built:  0.0.1 (inferred; no stamp)" "version inferred from untouched tools"
+  assert_contains "$report" "Built:  unstamped" "no stamp is reported as unstamped"
+  assert_contains "$report" "each version after
+0.0.1 --" "merge list starts at the oldest release"
   assert_contains "$report" "1 journal(s) use date-only markers" "legacy markers reported"
   [ ! -f "$vault/_tools/.self-recording-version" ] || fail "report mode must not write the stamp"
 
@@ -256,7 +258,7 @@ test_upgrade_replaces_only_untouched_tools() {
   [ "$(cat "$vault/_tools/.self-recording-version")" = "$(skill_version)" ] || fail "stamp not written"
 
   log="$(git --git-dir="$vault.git" log --format=%s -3)"
-  assert_contains "$log" "upgrade: self-recording 0.0.1 -> $(skill_version)" "one upgrade commit"
+  assert_contains "$log" "upgrade: self-recording unstamped -> $(skill_version)" "one upgrade commit"
   assert_contains "$log" "pre-upgrade: 1 file(s) changed" "drift committed separately first"
   [ -z "$(git --git-dir="$vault.git" status --porcelain)" ] || fail "tree should be clean after upgrade"
   git --git-dir="$vault.git" show --stat --format= HEAD | grep -q drift.md \
@@ -266,33 +268,108 @@ test_upgrade_replaces_only_untouched_tools() {
   assert_contains "$again" "Tools are current." "second run is a no-op"
 }
 
-test_upgrade_reports_ambiguous_version_as_a_range() {
-  vault="$TMP_ROOT/ambiguous"
-  mkdir -p "$vault/_tools"
-  VAULT_GIT_DIR="$vault.git" bash "$SKILL_DIR/scripts/setup-history.sh" "$vault" >/dev/null 2>&1 \
-    || fail "setup-history failed for $vault"
+test_upgrade_refuses_another_vaults_history() {
+  live="$TMP_ROOT/live/Vault"
+  mkdir -p "$TMP_ROOT/live"
+  make_vault "$live"
+  copy="$TMP_ROOT/scratch/Vault"
+  mkdir -p "$TMP_ROOT/scratch"
+  cp -R "$live" "$copy"
+  printf 'live drift\n' > "$live/drift.md"
+  before="$(git --git-dir="$live.git" rev-parse HEAD)"
+  set +e
+  out="$(VAULT_GIT_DIR="$live.git" bash "$SKILL_DIR/scripts/upgrade.sh" "$copy" --apply 2>&1)"
+  status=$?
+  set -e
+  [ "$status" -ne 0 ] || fail "--apply must refuse a history whose worktree is another vault"
+  assert_contains "$out" "is the history of" "explains the mismatched history"
+  [ "$(git --git-dir="$live.git" rev-parse HEAD)" = "$before" ] || fail "live vault history must not get a commit"
+  [ ! -f "$copy/_tools/.self-recording-version" ] || fail "copy must not be stamped"
+}
 
+test_upgrade_handles_special_characters_and_staging_failure() {
+  vault="$TMP_ROOT/R&D | notes"
+  make_vault "$vault"
   out="$(VAULT_GIT_DIR="$vault.git" bash "$SKILL_DIR/scripts/upgrade.sh" "$vault")"
-  assert_contains "$out" "Built:  unknown (no stamp, and no untouched tool" "no evidence is not a version"
+  assert_contains "$out" "1 journal(s) use date-only markers" "journals found under a path with & and |"
 
-  # setup-history.sh alone: every release it is identical in stays a candidate.
-  cp "$SKILL_DIR/scripts/setup-history.sh" "$vault/_tools/"
-  h="$(blob "$vault/_tools/setup-history.sh")"
-  range="$(awk -v h="$h" '!/^#/ && NF==3 && $2==h && $3=="setup-history.sh" { print $1 }' \
-    "$SKILL_DIR/reference/script-hashes.txt")"
-  lo="$(echo $range | awk '{ print $1 }')"
-  hi="$(echo $range | awk '{ print $NF }')"
-  [ "$lo" != "$hi" ] || return 0   # manifest no longer has a shared copy to test with
-  out="$(VAULT_GIT_DIR="$vault.git" bash "$SKILL_DIR/scripts/upgrade.sh" "$vault")"
-  assert_contains "$out" "Built:  $lo..$hi (inferred" "shared tool gives a range, not the newest"
-  assert_contains "$out" "each version after
-$lo --" "merge list starts at the oldest candidate"
-  assert_contains "$out" "compare before merging" "owner told the range may overlap the contract"
+  : > "$vault.git/index.lock"
+  set +e
+  out="$(VAULT_GIT_DIR="$vault.git" bash "$SKILL_DIR/scripts/upgrade.sh" "$vault" --apply 2>&1)"
+  status=$?
+  set -e
+  rm -f "$vault.git/index.lock"
+  [ "$status" -ne 0 ] || fail "--apply must fail when staging fails"
+  assert_contains "$out" "NOT committed" "says the upgrade is uncommitted"
 
-  VAULT_GIT_DIR="$vault.git" bash "$SKILL_DIR/scripts/upgrade.sh" "$vault" --apply >/dev/null \
-    || fail "upgrade --apply failed"
-  assert_contains "$(git --git-dir="$vault.git" log --format=%s -1)" \
-    "upgrade: self-recording $lo..$hi -> $(skill_version)" "commit names the range"
+  # A stamp that cannot be written must fail, not report "already current".
+  git --git-dir="$vault.git" add -A && git --git-dir="$vault.git" commit -qm "sweep" >/dev/null
+  rm -f "$vault/_tools/.self-recording-version" && mkdir "$vault/_tools/.self-recording-version"
+  set +e
+  out="$(VAULT_GIT_DIR="$vault.git" bash "$SKILL_DIR/scripts/upgrade.sh" "$vault" --apply 2>&1)"
+  status=$?
+  set -e
+  rmdir "$vault/_tools/.self-recording-version"
+  [ "$status" -ne 0 ] || fail "--apply must fail when the stamp cannot be written"
+  assert_contains "$out" "the upgrade is NOT recorded" "says the stamp was not written"
+}
+
+test_upgrade_parses_a_crlf_checkout() {
+  skill="$TMP_ROOT/crlf-skill"
+  cp -R "$SKILL_DIR" "$skill"
+  for f in SKILL.md reference/script-hashes.txt; do
+    awk '{ printf "%s\r\n", $0 }' "$SKILL_DIR/$f" > "$skill/$f"
+  done
+  vault="$TMP_ROOT/crlf-vault"
+  make_vault "$vault"
+  out="$(VAULT_GIT_DIR="$vault.git" bash "$skill/scripts/upgrade.sh" "$vault")" || fail "report failed on a CRLF checkout"
+  assert_contains "$out" "OK        hook-autocommit.sh" "CRLF manifest still matches installed tools"
+  case "$out" in *ABSENT*) fail "CRLF manifest must not report installed tools as ABSENT: $out" ;; esac
+}
+
+test_upgrade_refuses_an_unreadable_history() {
+  vault="$TMP_ROOT/broken-history"
+  make_vault "$vault"
+  rm -rf "$vault.git/objects" "$vault.git/HEAD"
+  mkdir -p "$vault.git"
+  before="$(blob "$vault/_tools/check-current-state.sh")"
+  set +e
+  out="$(VAULT_GIT_DIR="$vault.git" bash "$SKILL_DIR/scripts/upgrade.sh" "$vault" --apply 2>&1)"
+  status=$?
+  set -e
+  [ "$status" -ne 0 ] || fail "--apply must stop when the history cannot be read"
+  assert_contains "$out" "nothing was changed" "says the vault was left alone"
+  [ ! -f "$vault/_tools/.self-recording-version" ] || fail "no stamp without a readable history"
+}
+
+test_upgrade_never_writes_through_symlinks() {
+  vault="$TMP_ROOT/linked"
+  make_vault "$vault"
+  shared="$TMP_ROOT/shared-tools"
+  mkdir -p "$shared"
+  printf '# older shared copy\n' > "$shared/check-current-state.sh"
+  rm "$vault/_tools/check-current-state.sh"
+  ln -s "$shared/check-current-state.sh" "$vault/_tools/check-current-state.sh"
+  # Register the shared copy as an older release, so without the guard it is UPDATE.
+  skill="$TMP_ROOT/linked-skill"
+  cp -R "$SKILL_DIR" "$skill"
+  printf '0.0.1 %s check-current-state.sh\n' "$(blob "$shared/check-current-state.sh")" > "$skill/reference/m.tmp"
+  cat "$skill/reference/script-hashes.txt" >> "$skill/reference/m.tmp"
+  mv "$skill/reference/m.tmp" "$skill/reference/script-hashes.txt"
+  out="$(VAULT_GIT_DIR="$vault.git" bash "$skill/scripts/upgrade.sh" "$vault" --apply 2>&1)" || fail "apply failed: $out"
+  assert_contains "$out" "LINKED    check-current-state.sh" "symlinked tool is reported, not replaced"
+  [ "$(cat "$shared/check-current-state.sh")" = "# older shared copy" ] || fail "upgrade must not write through a symlinked tool"
+
+  vault2="$TMP_ROOT/linked-dir"
+  make_vault "$vault2"
+  mv "$vault2/_tools" "$TMP_ROOT/real-tools"
+  ln -s "$TMP_ROOT/real-tools" "$vault2/_tools"
+  set +e
+  out="$(VAULT_GIT_DIR="$vault2.git" bash "$SKILL_DIR/scripts/upgrade.sh" "$vault2" --apply 2>&1)"
+  status=$?
+  set -e
+  [ "$status" -ne 0 ] || fail "a symlinked _tools/ must be refused"
+  [ ! -f "$TMP_ROOT/real-tools/.self-recording-version" ] || fail "no stamp written through a symlinked _tools/"
 }
 
 test_upgrade_refuses_without_history_or_from_tools() {
@@ -497,10 +574,18 @@ test_manifest_matches_current_scripts
 printf 'PASS: release manifest matches scripts\n'
 test_upgrade_replaces_only_untouched_tools
 printf 'PASS: upgrade replaces only untouched tools\n'
-test_upgrade_reports_ambiguous_version_as_a_range
-printf 'PASS: upgrade reports an ambiguous version as a range\n'
 test_upgrade_refuses_without_history_or_from_tools
 printf 'PASS: upgrade refuses unsafe runs\n'
+test_upgrade_refuses_another_vaults_history
+printf "PASS: upgrade refuses another vault's history\n"
+test_upgrade_parses_a_crlf_checkout
+printf 'PASS: upgrade parses a CRLF checkout\n'
+test_upgrade_refuses_an_unreadable_history
+printf 'PASS: upgrade refuses an unreadable history\n'
+test_upgrade_handles_special_characters_and_staging_failure
+printf 'PASS: upgrade handles & and | in paths, and staging failure\n'
+test_upgrade_never_writes_through_symlinks
+printf 'PASS: upgrade never writes through symlinks\n'
 test_dream_commit_makes_one_commit_per_run
 printf 'PASS: dream wrapper makes one commit per run\n'
 test_dream_commit_handles_a_vault_path_with_spaces

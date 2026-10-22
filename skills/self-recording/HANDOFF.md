@@ -8,7 +8,7 @@ the block below.
 Paste this:
 
 ```text
-Install and then run the self-recording skill (v0.4.0). Do not improvise a different memory system.
+Install and then run the self-recording skill (v0.5.0). Do not improvise a different memory system.
 
 Install
 1. The skill folder is the directory that contains SKILL.md together with reference/, templates/, and scripts/ (in this repo: skills/self-recording/). Copy that whole folder to the current client's skills directory, named self-recording. Hermes: $HERMES_HOME/skills/self-recording/ (default ~/.hermes/skills/self-recording/). Claude Code: ~/.claude/skills/self-recording/ unless the plugin is already installed. Do not copy only SKILL.md. Do not use a SKILL.md URL install.

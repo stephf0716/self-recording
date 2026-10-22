@@ -24,7 +24,7 @@ text; every bullet cites its entry; `unverified` entries stay out; and it says
 how to work, never what to do. The rest of the job's rules are in the prompt
 itself (`templates/DREAM.md`, "Rules that override everything else"), because
 a scheduled run may not get the contract injected. What went wrong without
-them: `pitfalls.md` 4e and 14.
+them: `pitfalls.md` 4e and 15.
 
 ## Hermes setup
 

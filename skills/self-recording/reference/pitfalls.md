@@ -326,7 +326,19 @@ become live again.
 
 ---
 
-## 14. Nightly consolidation feeds on itself, and erases what it never saw
+## 14. Re-running setup on an established vault
+
+Pointing the skill at a vault it already built and following Steps 2–5 again
+overwrites an adapted `AGENTS.md` with the template, fails partway when
+`install-hooks.sh` refuses existing hooks, and silently leaves older copies of
+fixed tools in `_tools/` — a vault built from 0.3.0 still had a
+`check-current-state.sh` that could not see same-day decisions.
+
+**Fix:** upgrade instead: `scripts/upgrade.sh`, per `reference/upgrading.md`.
+
+---
+
+## 15. Nightly consolidation feeds on itself, and erases what it never saw
 
 Ways an unattended consolidation job ("dream", `templates/DREAM.md`) goes
 wrong. The first four came from design review and Hermes's own documentation;
@@ -356,21 +368,3 @@ the rest turned up in the first live install (Hermes, October 2026):
 - **Same-day logs overwrite each other.** A supervised first run and the first
   scheduled run can land on the same date. The second now takes a `-2` suffix,
   and the newest-log rule orders by date then suffix, not by name.
-
----
-
-## 15. Re-running setup on an established vault
-
-Pointing the skill at a vault it already built and following Steps 2–5 again
-overwrites an adapted `AGENTS.md` with the template, fails partway when
-`install-hooks.sh` refuses existing hooks, and silently leaves older copies of
-fixed tools in `_tools/` — a vault built from 0.3.0 still had a
-`check-current-state.sh` that could not see same-day decisions.
-
-**Fix:** `scripts/upgrade.sh` reports which tools are current, which are untouched
-copies of an older release (safe to replace), and which were edited locally
-(merge by hand); when several releases ship identical tools it reports the
-range rather than guessing the newest; `--apply` replaces only the safe ones, stamps
-`_tools/.self-recording-version`, and commits once. Contract merges follow
-`reference/upgrading.md`, with the owner. Journals are not migrated; old entries
-stay as written.
