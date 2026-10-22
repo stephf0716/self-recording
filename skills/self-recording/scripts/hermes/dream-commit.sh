@@ -83,6 +83,17 @@ host_logs() {
   done | sort -k1,1 -k2,2n
 }
 
+# "<completed: time> (<log>)" for this host's newest finished log, or nothing.
+# Kept out of $( ... ): bash 3.2 (macOS) misparses a case pattern's ")" there.
+newest_completed() {
+  host_logs | sort -k1,1r -k2,2nr | while read -r _ _ f; do
+    last="$(tail -n 1 "$f" | tr -d '\r')"
+    case "$last" in
+      (completed:*) printf '%s (%s)\n' "$(echo "${last#completed:}" | sed 's/^ *//')" "${f#"$VAULT"/}"; break ;;
+    esac
+  done
+}
+
 if [ "$MODE" = "begin" ]; then
   if [ -f "$STATE" ]; then
     echo "dream-commit: warning: previous run never reached 'end' ($(cat "$STATE")); starting over." >&2
@@ -104,10 +115,7 @@ if [ "$MODE" = "begin" ]; then
   day="$(date '+%Y-%m-%d')"
 
   window="none -- first run on $HOST"
-  found="$(host_logs | sort -k1,1r -k2,2nr | while read -r _ _ f; do
-    last="$(tail -n 1 "$f" | tr -d '\r')"
-    case "$last" in completed:*) printf '%s (%s)\n' "$(echo "${last#completed:}" | sed 's/^ *//')" "${f#"$VAULT"/}"; break ;; esac
-  done)"
+  found="$(newest_completed)"
   [ -n "$found" ] && window="$found"
 
   name="$day-dream-$HOST.md"; i=2
