@@ -366,5 +366,8 @@ the rest turned up in the first live install (Hermes, October 2026):
   the owner's chat, which defeats a background job. Setup now sets delivery to
   local; the report is a log.
 - **Same-day logs overwrite each other.** A supervised first run and the first
-  scheduled run can land on the same date. The second now takes a `-2` suffix,
-  and the newest-log rule orders by date then suffix, not by name.
+  scheduled run can land on the same date. The second now takes a `-2` suffix.
+- **The model guesses bookkeeping.** Asked to write the run's end time, it
+  wrote 03:14 for a run that ended at 03:10; the next window starts there, so
+  a late guess skips sessions. Picking the log, the window and the
+  `completed:` time is now `dream-commit.sh`'s job, not the prompt's.

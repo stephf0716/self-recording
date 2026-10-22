@@ -444,6 +444,52 @@ test_dream_commit_makes_one_commit_per_run() {
   unset VAULT_GIT_DIR DREAM_MEMORIES
 }
 
+test_dream_commit_does_the_run_bookkeeping() {
+  vault="$TMP_ROOT/dream-books"
+  make_vault "$vault"
+  w="$SKILL_DIR/scripts/hermes/dream-commit.sh"
+  export VAULT_GIT_DIR="$vault.git" DREAM_MEMORIES="$TMP_ROOT/no-memories"
+  s="$vault/_agent/sessions"
+
+  out="$(bash "$w" begin "$vault" Ember)"
+  assert_contains "$out" "window_start: none -- first run on Ember" "no logs is a first run"
+  log="$(printf '%s\n' "$out" | sed -n 's/^log: //p')"
+  day="$(date '+%Y-%m-%d')"
+  [ "$log" = "_agent/sessions/$day-dream-Ember.md" ] || fail "first log name: $log"
+  mkdir -p "$s" && printf 'run log\n' > "$vault/$log"
+  bash "$w" end "$vault" >/dev/null
+  last="$(tail -n 1 "$vault/$log")"
+  case "$last" in "completed: $day "[0-2][0-9]:[0-5][0-9]*) ;; *) fail "end must stamp completed: from the clock, got: $last" ;; esac
+  git --git-dir="$vault.git" show --stat --format= HEAD | grep -q "dream-Ember.md" || fail "completed: line lands in the dream commit"
+
+  # Same day again: a -2 log, and the window starts at the first run's completed: time.
+  # A newer log from another host, and an unfinished -9 log, must not count.
+  printf 'other\ncompleted: 2099-01-01 00:00 UTC\n' > "$s/$day-dream-Other.md"
+  printf 'partial\n' > "$s/$day-dream-Ember-9.md"
+  out="$(bash "$w" begin "$vault" Ember)"
+  assert_contains "$out" "window_start: ${last#completed: } (_agent/sessions/$day-dream-Ember.md)" "window starts at this host's newest completed log"
+  assert_contains "$out" "log: _agent/sessions/$day-dream-Ember-2.md" "second run that day gets -2"
+  bash "$w" end "$vault" >/dev/null 2>&1
+
+  # Suffixes order numerically: a completed -10 beats a completed -2.
+  printf 'x\ncompleted: 2026-01-01 01:00 UTC\n' > "$s/2026-01-01-dream-Ember-2.md"
+  printf 'x\ncompleted: 2026-01-01 02:00 UTC\n' > "$s/2026-01-01-dream-Ember-10.md"
+  rm "$s/$day-dream-Ember.md" "$s/$day-dream-Ember-9.md"
+  out="$(bash "$w" begin "$vault" Ember)"
+  assert_contains "$out" "window_start: 2026-01-01 02:00 UTC" "-10 sorts after -2"
+  bash "$w" end "$vault" >/dev/null 2>&1
+
+  # A same-named copy must not commit into the original's history.
+  copy="$TMP_ROOT/dream-copy/dream-books"
+  mkdir -p "$TMP_ROOT/dream-copy" && cp -R "$vault" "$copy"
+  set +e
+  bash "$w" begin "$copy" Ember >/dev/null 2>&1
+  status=$?
+  set -e
+  [ "$status" -ne 0 ] || fail "dream begin must refuse another vault's history"
+  unset VAULT_GIT_DIR DREAM_MEMORIES
+}
+
 test_dream_commit_handles_a_vault_path_with_spaces() {
   vault="$TMP_ROOT/My Drive/dream vault"
   mkdir -p "$TMP_ROOT/My Drive"
@@ -454,7 +500,7 @@ test_dream_commit_handles_a_vault_path_with_spaces() {
   export VAULT_GIT_DIR="$vault.git" DREAM_MEMORIES="$mem"
   bash "$SKILL_DIR/scripts/hermes/dream-commit.sh" begin "$vault" >/dev/null || fail "begin failed on a path with spaces"
   printf '\n## 2026-10-18 — y\n' >> "$vault/Project/JOURNAL.md"
-  bash "$SKILL_DIR/scripts/hermes/dream-commit.sh" end "$vault" >/dev/null || fail "end failed on a path with spaces"
+  bash "$SKILL_DIR/scripts/hermes/dream-commit.sh" end "$vault" >/dev/null 2>&1 || fail "end failed on a path with spaces"
   assert_contains "$(git --git-dir="$vault.git" log --format=%s -1)" "dream: $(date '+%Y-%m-%d')" "dream commit on a path with spaces"
   unset VAULT_GIT_DIR DREAM_MEMORIES
 }
@@ -490,17 +536,14 @@ test_dream_prompt_keeps_its_safety_rules() {
   fi
   assert_contains "$d" "{{WRITE_PERMISSIONS}}" "vault write permissions travel inside the prompt"
   assert_contains "$d" "restricted content omitted" "forbidden content is left out, not described"
-  assert_contains "$d" "-dream-{{HOST}}-2.md" "a second run the same day gets its own log"
-  assert_contains "$d" "Never overwrite a log" "logs are append-only"
-  assert_contains "$d" "Only this host's" "window comes from this host's logs only"
-  assert_contains "$d" "\`completed: <that output>\`" "a finished run marks its log"
-  assert_contains "$d" "Read the clock; never write a time you did not" "completed time comes from date, not the model"
-  assert_contains "$d" "its window is
-retried" "a run that stopped partway is retried"
+  # Window, log name and completed: time come from the wrapper, not the model.
+  assert_contains "$d" "begin \"{{VAULT_PATH}}\" \"{{HOST}}\"" "begin is told the host"
+  assert_contains "$d" "begin's \`window_start:\` time" "window comes from begin"
+  assert_contains "$d" "at the path begin printed as \`log:\`" "log name comes from begin"
+  assert_contains "$d" "never write a \`completed:\`
+line yourself" "the model never writes completed:"
   assert_contains "$d" "otherwise
 \`unverified\`" "digest-only lines need the owner's words to be probable"
-  assert_contains "$d" "puts
-\`-2\` before the unsuffixed log" "newest-log rule does not trust name order"
   # Cloud-sync paths have spaces: every shell command must quote its placeholder paths.
   if grep -oE '\`(bash|grep)[^\`]*\`' "$SKILL_DIR/templates/DREAM.md" | grep -E '(^|[^"/])\{\{(VAULT_PATH|COMMIT_WRAPPER)\}\}'; then
     fail "DREAM.md shell commands must quote {{VAULT_PATH}} and {{COMMIT_WRAPPER}}"
@@ -588,6 +631,8 @@ test_upgrade_never_writes_through_symlinks
 printf 'PASS: upgrade never writes through symlinks\n'
 test_dream_commit_makes_one_commit_per_run
 printf 'PASS: dream wrapper makes one commit per run\n'
+test_dream_commit_does_the_run_bookkeeping
+printf 'PASS: dream wrapper does the run bookkeeping\n'
 test_dream_commit_handles_a_vault_path_with_spaces
 printf 'PASS: dream wrapper handles a vault path with spaces\n'
 test_dream_commit_refuses_without_history
