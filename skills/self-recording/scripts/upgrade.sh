@@ -198,13 +198,25 @@ done <<EOF
 $UPDATES
 EOF
 
-mkdir -p "$TOOLS"
-printf '%s\n' "$CURRENT" > "$STAMP_FILE"
+mkdir -p "$TOOLS" && printf '%s\n' "$CURRENT" > "$STAMP_FILE" || {
+  echo "ERROR: could not write $STAMP_FILE; the upgrade is NOT recorded." >&2
+  exit 1; }
 
 g add -A || {
   echo "ERROR: could not stage the upgrade (is another git process running?)." >&2
   echo "       Tools and the stamp are written but NOT committed; commit them before anything else." >&2
   exit 1; }
+
+# A sweep or hook may have committed part, or all, of the upgrade already.
+# Counted before our own commit, so it covers both branches below.
+others=0
+[ -n "$start" ] && others="$(g rev-list --count "$start..HEAD" 2>/dev/null || echo 0)"
+warn_others() {
+  [ "$others" -gt 0 ] || return 0
+  echo "WARNING: $others other commit(s) landed during the upgrade (a sweep or hook);" >&2
+  echo "         part or all of it may be in them. Full undo: revert $(g rev-parse --short "$start")..HEAD" >&2
+}
+
 if ! g diff --cached --quiet; then
   g commit -q -m "upgrade: self-recording $FROM_LABEL -> $CURRENT" \
     -m "Replaced (untouched copies of an older release):
@@ -215,14 +227,14 @@ per reference/upgrading.md, in a separate commit." \
   echo
   echo "Committed: $(g log -1 --format='%h %s')"
   echo "Undo:      _tools/vgit revert $(g log -1 --format=%h)   (plain git if the vault has .git)"
-  # A sweep or hook may have committed part of the upgrade in between.
-  others="$(g rev-list --count "$start..HEAD~1" 2>/dev/null || echo 0)"
-  if [ -n "$start" ] && [ "$others" -gt 0 ]; then
-    echo "WARNING: $others other commit(s) landed during the upgrade (a sweep or hook);" >&2
-    echo "         part of it may be in them. Full undo: revert $(g rev-parse --short "$start")..HEAD" >&2
-  fi
+  warn_others
 else
   echo
-  echo "Nothing to commit; already current."
+  if [ "$others" -gt 0 ]; then
+    echo "Nothing left to commit: another writer already committed the upgrade."
+  else
+    echo "Nothing to commit; already current."
+  fi
+  warn_others
 fi
 exit 0

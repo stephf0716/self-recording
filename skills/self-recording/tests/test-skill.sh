@@ -328,6 +328,17 @@ test_upgrade_handles_special_characters_and_staging_failure() {
   rm -f "$vault.git/index.lock"
   [ "$status" -ne 0 ] || fail "--apply must fail when staging fails"
   assert_contains "$out" "NOT committed" "says the upgrade is uncommitted"
+
+  # A stamp that cannot be written must fail, not report "already current".
+  git --git-dir="$vault.git" add -A && git --git-dir="$vault.git" commit -qm "sweep" >/dev/null
+  rm -f "$vault/_tools/.self-recording-version" && mkdir "$vault/_tools/.self-recording-version"
+  set +e
+  out="$(VAULT_GIT_DIR="$vault.git" bash "$SKILL_DIR/scripts/upgrade.sh" "$vault" --apply 2>&1)"
+  status=$?
+  set -e
+  rmdir "$vault/_tools/.self-recording-version"
+  [ "$status" -ne 0 ] || fail "--apply must fail when the stamp cannot be written"
+  assert_contains "$out" "the upgrade is NOT recorded" "says the stamp was not written"
 }
 
 test_upgrade_refuses_without_history_or_from_tools() {
