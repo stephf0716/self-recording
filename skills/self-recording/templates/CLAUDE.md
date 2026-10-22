@@ -11,6 +11,11 @@ full to this session.
 This file is deliberately a pointer, not a copy — the contract lives in one place so
 it cannot drift between clients.
 
+@_agent/GUIDANCE.md
+
+<!-- The line above imports how {{OWNER}} wants to be worked with, rebuilt
+nightly by the dream job. Delete it if nightly consolidation is not enabled. -->
+
 ## The part that matters most
 
 **Record what you learn as you work, without being asked.** Durable memory goes in

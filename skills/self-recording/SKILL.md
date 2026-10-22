@@ -1,7 +1,7 @@
 ---
 name: self-recording
 description: Set up a Markdown folder as durable, portable AI memory that records itself while you work — project journals, provenance metadata, git-backed undo, and auto-commit hooks. Use when someone wants their notes or project folder to become memory an AI reads and writes across sessions and clients, wants to stop re-explaining context to every new chat, wants AI-written notes kept distinguishable from their own, or asks to replicate an "Obsidian as AI memory" / "AGENTS.md vault" setup. Also use to audit, repair, or upgrade an existing one.
-version: 0.4.0
+version: 0.5.0
 license: MIT
 ---
 
@@ -216,6 +216,15 @@ grant is broad — say so. See `reference/pitfalls.md` 4a and 4b.
 bash scripts/upgrade.sh /path/to/vault --apply   # on a new vault: writes the stamp, commits
 ```
 
+### Nightly consolidation ("dream") — optional
+
+Once the contract works and history is automated, offer a scheduled job that
+journals what the day's sessions decided but never recorded, and rewrites
+`_agent/GUIDANCE.md`, a short "how to work with the owner" file every client
+reads at startup. Never enable it unasked. It is the second unattended writer
+in the vault, so it has its own setup, including a supervised first run:
+`reference/nightly-consolidation.md`.
+
 ## Step 6 — Verify, with real work
 
 Synthetic tests measure compliance, not judgment. Telling an agent "record this in
@@ -270,6 +279,11 @@ What makes it survivable, and worth saying plainly:
   lifecycle recovery and scheduled sweeps may group changes differently.
 - `confidence: probable` is greppable, so an audit is possible whenever they want.
 
+A nightly consolidation job, if enabled, adds a second unattended writer: one
+that reads transcripts rather than taking part in them. Its entries are
+`probable` or `unverified`, cite a dream log, and revert as one commit — but it
+will sometimes record a passing remark as a preference.
+
 They bought frictionlessness with accumulated noise. That's usually the right trade
 — but it's their trade to make knowingly.
 
@@ -278,16 +292,17 @@ They bought frictionlessness with accumulated noise. That's usually the right tr
 - `reference/design-decisions.md` — the four forks, with tradeoffs and recommendations
 - `reference/upgrading.md` — upgrading an established vault, per version
 - `reference/script-hashes.txt` — release manifest `upgrade.sh` checks tools against
+- `reference/nightly-consolidation.md` — the optional dream job: why, Hermes setup, verification
 - `reference/pitfalls.md` — traps that cost real debugging: cloud sync vs `.git`,
   line-ending churn, silent hook failure, `SessionEnd` not firing, sandboxed clients
   that can't commit, Full Disk Access for launchd, stale contract files, journals
-  outgrowing context, upgrading over an adapted contract
+  outgrowing context, upgrading over an adapted contract, nightly consolidation
 - `templates/` — `AGENTS.md`, `CLAUDE.md`, `HERMES.md` (→ `.hermes.md`),
-  `MEMORY-SCHEMA.md`, `JOURNAL.md`, `_archive/README.md`
+  `MEMORY-SCHEMA.md`, `JOURNAL.md`, `_archive/README.md`, `DREAM.md`
 - `scripts/` — `setup-history.sh`, `install-hooks.sh`, `hook-autocommit.sh`,
   `install-autocommit-agent.sh` + `launchd/`, `check-current-state.sh`,
   `new-project.sh`, `archive-project.sh`, `vgit` (vault tools); `upgrade.sh`
-  (runs from the skill)
+  (runs from the skill); `hermes/dream-commit.sh` (goes in `$HERMES_HOME/scripts`)
 
 ## Adapting, not copying
 

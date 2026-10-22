@@ -137,7 +137,7 @@ test_archive_project_preserves_name_and_content() {
 }
 
 test_all_shell_scripts_parse() {
-  for script in "$SKILL_DIR"/scripts/*.sh; do
+  for script in "$SKILL_DIR"/scripts/*.sh "$SKILL_DIR"/scripts/hermes/*.sh; do
     bash -n "$script" || fail "shell syntax check failed: $script"
   done
 }
@@ -212,8 +212,8 @@ test_manifest_matches_current_scripts() {
     [ -f "$SKILL_DIR/scripts/$t" ] || fail "manifest lists missing script: $t"
     [ "$(blob "$SKILL_DIR/scripts/$t")" = "$h" ] || fail "manifest hash for $t is not the current file; add/refresh the $v rows"
   done
-  # Every vault tool must be listed; upgrade.sh is not a vault tool.
-  (cd "$SKILL_DIR/scripts" && find . -type f -not -name upgrade.sh | sed 's|^\./||') |
+  # Every vault tool must be listed; upgrade.sh and hermes/ are not vault tools.
+  (cd "$SKILL_DIR/scripts" && find . -type f -not -name upgrade.sh -not -path './hermes/*' | sed 's|^\./||') |
     while IFS= read -r t; do
       printf '%s\n' "$rows" | awk -v t="$t" '$3==t { f=1 } END { exit !f }' \
         || fail "vault tool $t is not in script-hashes.txt for $v"
@@ -390,6 +390,211 @@ test_upgrade_refuses_without_history_or_from_tools() {
   [ "$status" -ne 0 ] || fail "upgrade.sh copied into _tools must refuse to run"
 }
 
+test_dream_commit_makes_one_commit_per_run() {
+  vault="$TMP_ROOT/dream-vault"
+  make_vault "$vault"
+  w="$SKILL_DIR/scripts/hermes/dream-commit.sh"
+  mem="$TMP_ROOT/dream-memories"
+  mkdir -p "$mem"
+  printf 'Prefers terse replies\n' > "$mem/USER.md"
+  export VAULT_GIT_DIR="$vault.git" DREAM_MEMORIES="$mem"
+
+  printf 'hand edit\n' > "$vault/hand.md"
+  bash "$w" begin "$vault" >/dev/null || fail "dream begin failed"
+  ls "$mem"/.dream-backup/"$(date '+%Y-%m-%d')"-*/USER.md >/dev/null 2>&1 || fail "begin should back up harness memory"
+  printf '\n## 2026-10-18 — x\n' >> "$vault/Project/JOURNAL.md"
+  mkdir -p "$vault/_agent/sessions" && printf 'log\n' > "$vault/_agent/sessions/d.md"
+  out="$(bash "$w" end "$vault" 2>&1)" || fail "dream end failed"
+  assert_contains "$out" "dream: $(date '+%Y-%m-%d')" "end reports the dream commit"
+
+  log="$(git --git-dir="$vault.git" log --format=%s -2)"
+  assert_contains "$log" "dream: $(date '+%Y-%m-%d')" "dream commit exists"
+  assert_contains "$log" "pre-dream: 1 file(s) changed" "pre-existing drift split off"
+  files="$(git --git-dir="$vault.git" show --name-only --format= HEAD)"
+  assert_contains "$files" "Project/JOURNAL.md" "dream commit holds the journal change"
+  case "$files" in *hand.md*) fail "dream commit must not contain pre-existing drift" ;; esac
+
+  # A sweep landing mid-run breaks the one-revert promise; end must say so.
+  bash "$w" begin "$vault" >/dev/null
+  printf 'a\n' >> "$vault/Project/JOURNAL.md"
+  git --git-dir="$vault.git" add -A && git --git-dir="$vault.git" commit -qm "sweep: 1 file(s) changed"
+  printf 'b\n' >> "$vault/Project/JOURNAL.md"
+  out="$(bash "$w" end "$vault" 2>&1)"
+  assert_contains "$out" "1 other commit(s) landed during the run" "interleaved commit is reported"
+
+  out="$(bash "$w" end "$vault" 2>&1)"
+  assert_contains "$out" "nothing to commit" "clean tree makes no commit"
+
+  # A sweep that captures every write leaves a clean tree; end must still warn.
+  bash "$w" begin "$vault" >/dev/null
+  printf 'c\n' >> "$vault/Project/JOURNAL.md"
+  git --git-dir="$vault.git" add -A && git --git-dir="$vault.git" commit -qm "sweep: 1 file(s) changed"
+  out="$(bash "$w" end "$vault" 2>&1)"
+  assert_contains "$out" "nothing to commit" "sweep took every write"
+  assert_contains "$out" "1 other commit(s) landed during the run" "clean tree still reports the sweep"
+
+  # A same-day retry must not overwrite the earlier run's memory backup.
+  first="$(ls -1d "$mem"/.dream-backup/*/ | sort | head -1)"
+  printf 'bad rebuild\n' > "$mem/USER.md"
+  sleep 1
+  bash "$w" begin "$vault" >/dev/null
+  assert_contains "$(cat "$first/USER.md")" "Prefers terse replies" "earlier backup survives a retry"
+  [ "$(ls -1d "$mem"/.dream-backup/*/ | wc -l)" -le 7 ] || fail "backups beyond 7 runs should be pruned"
+  bash "$w" end "$vault" >/dev/null 2>&1
+  unset VAULT_GIT_DIR DREAM_MEMORIES
+}
+
+test_dream_commit_does_the_run_bookkeeping() {
+  vault="$TMP_ROOT/dream-books"
+  make_vault "$vault"
+  w="$SKILL_DIR/scripts/hermes/dream-commit.sh"
+  export VAULT_GIT_DIR="$vault.git" DREAM_MEMORIES="$TMP_ROOT/no-memories"
+  s="$vault/_agent/sessions"
+
+  out="$(bash "$w" begin "$vault" Ember)"
+  assert_contains "$out" "window_start: none -- first run on Ember" "no logs is a first run"
+  log="$(printf '%s\n' "$out" | sed -n 's/^log: //p')"
+  day="$(date '+%Y-%m-%d')"
+  [ "$log" = "_agent/sessions/$day-dream-Ember.md" ] || fail "first log name: $log"
+  mkdir -p "$s" && printf 'run log\n' > "$vault/$log"
+  bash "$w" end "$vault" >/dev/null
+  last="$(tail -n 1 "$vault/$log")"
+  case "$last" in "completed: $day "[0-2][0-9]:[0-5][0-9]*) ;; *) fail "end must stamp completed: from the clock, got: $last" ;; esac
+  git --git-dir="$vault.git" show --stat --format= HEAD | grep -q "dream-Ember.md" || fail "completed: line lands in the dream commit"
+
+  # Same day again: a -2 log, and the window starts at the first run's completed: time.
+  # A newer log from another host, and an unfinished -9 log, must not count.
+  printf 'other\ncompleted: 2099-01-01 00:00 UTC\n' > "$s/$day-dream-Other.md"
+  printf 'partial\n' > "$s/$day-dream-Ember-9.md"
+  out="$(bash "$w" begin "$vault" Ember)"
+  assert_contains "$out" "window_start: ${last#completed: } (_agent/sessions/$day-dream-Ember.md)" "window starts at this host's newest completed log"
+  assert_contains "$out" "log: _agent/sessions/$day-dream-Ember-2.md" "second run that day gets -2"
+  bash "$w" end "$vault" >/dev/null 2>&1
+
+  # Suffixes order numerically: a completed -10 beats a completed -2.
+  printf 'x\ncompleted: 2026-01-01 01:00 UTC\n' > "$s/2026-01-01-dream-Ember-2.md"
+  printf 'x\ncompleted: 2026-01-01 02:00 UTC\n' > "$s/2026-01-01-dream-Ember-10.md"
+  rm "$s/$day-dream-Ember.md" "$s/$day-dream-Ember-9.md"
+  out="$(bash "$w" begin "$vault" Ember)"
+  assert_contains "$out" "window_start: 2026-01-01 02:00 UTC" "-10 sorts after -2"
+  bash "$w" end "$vault" >/dev/null 2>&1
+
+  # A same-named copy must not commit into the original's history.
+  copy="$TMP_ROOT/dream-copy/dream-books"
+  mkdir -p "$TMP_ROOT/dream-copy" && cp -R "$vault" "$copy"
+  set +e
+  bash "$w" begin "$copy" Ember >/dev/null 2>&1
+  status=$?
+  set -e
+  [ "$status" -ne 0 ] || fail "dream begin must refuse another vault's history"
+  unset VAULT_GIT_DIR DREAM_MEMORIES
+}
+
+test_dream_commit_handles_a_vault_path_with_spaces() {
+  vault="$TMP_ROOT/My Drive/dream vault"
+  mkdir -p "$TMP_ROOT/My Drive"
+  make_vault "$vault"
+  mem="$TMP_ROOT/dream memories"
+  mkdir -p "$mem"
+  printf 'x\n' > "$mem/USER.md"
+  export VAULT_GIT_DIR="$vault.git" DREAM_MEMORIES="$mem"
+  bash "$SKILL_DIR/scripts/hermes/dream-commit.sh" begin "$vault" >/dev/null || fail "begin failed on a path with spaces"
+  printf '\n## 2026-10-18 — y\n' >> "$vault/Project/JOURNAL.md"
+  bash "$SKILL_DIR/scripts/hermes/dream-commit.sh" end "$vault" >/dev/null 2>&1 || fail "end failed on a path with spaces"
+  assert_contains "$(git --git-dir="$vault.git" log --format=%s -1)" "dream: $(date '+%Y-%m-%d')" "dream commit on a path with spaces"
+  unset VAULT_GIT_DIR DREAM_MEMORIES
+}
+
+test_dream_commit_refuses_without_history() {
+  vault="$TMP_ROOT/dream-nohist"
+  mkdir -p "$vault"
+  set +e
+  VAULT_GIT_DIR="$vault.git" bash "$SKILL_DIR/scripts/hermes/dream-commit.sh" begin "$vault" >/dev/null 2>&1
+  status=$?
+  set -e
+  [ "$status" -ne 0 ] || fail "dream begin must stop when there is no history"
+}
+
+test_dream_prompt_keeps_its_safety_rules() {
+  d="$(cat "$SKILL_DIR/templates/DREAM.md")"
+  assert_contains "$d" "## Untrusted content" "untrusted-content rule lives in the prompt"
+  assert_contains "$d" "Never write \`confidence: confirmed\`" "confirmed is forbidden"
+  assert_contains "$d" "Never mark a \`confirmed\` entry superseded" "confirmed entries are not superseded"
+  assert_contains "$d" "Do not create or edit skills" "no skill writing"
+  assert_contains "$d" "First run: skip this step" "first run does not rebuild the digest"
+  assert_contains "$d" "\"{{COMMIT_WRAPPER}}\" begin" "commit wrapper brackets the run"
+  assert_contains "$d" "summaries skipped: check-current-state.sh not installed" "missing summary tool is skipped, not created"
+  assert_contains "$d" "step 7 builds it only from vault entries, never from session text" "guidance is built from entries only"
+  assert_contains "$d" "**Every bullet cites the entry behind it.**" "guidance bullets carry provenance"
+  assert_contains "$d" "Skip \`unverified\`" "unverified entries stay out of guidance"
+  assert_contains "$d" "**How to work, never what to do.**" "guidance cannot carry actions"
+  assert_contains "$d" "never overrides \`AGENTS.md\`" "guidance never outranks the contract"
+  assert_contains "$d" "dismissals" "harvest looks at friction"
+  assert_contains "$d" "is the run's log, not a message" "report is not delivered as a message"
+  if grep -n "delivered to" "$SKILL_DIR/templates/DREAM.md"; then
+    fail "DREAM.md must not assume the report is delivered to the owner"
+  fi
+  assert_contains "$d" "{{WRITE_PERMISSIONS}}" "vault write permissions travel inside the prompt"
+  assert_contains "$d" "restricted content omitted" "forbidden content is left out, not described"
+  # Window, log name and completed: time come from the wrapper, not the model.
+  assert_contains "$d" "begin \"{{VAULT_PATH}}\" \"{{HOST}}\"" "begin is told the host"
+  assert_contains "$d" "begin's \`window_start:\` time" "window comes from begin"
+  assert_contains "$d" "at the path begin printed as \`log:\`" "log name comes from begin"
+  assert_contains "$d" "never write a \`completed:\`
+line yourself" "the model never writes completed:"
+  assert_contains "$d" "otherwise
+\`unverified\`" "digest-only lines need the owner's words to be probable"
+  # Cloud-sync paths have spaces: every shell command must quote its placeholder paths.
+  if grep -oE '\`(bash|grep)[^\`]*\`' "$SKILL_DIR/templates/DREAM.md" | grep -E '(^|[^"/])\{\{(VAULT_PATH|COMMIT_WRAPPER)\}\}'; then
+    fail "DREAM.md shell commands must quote {{VAULT_PATH}} and {{COMMIT_WRAPPER}}"
+  fi
+  # Every placeholder the job prompt uses must be explained where setup fills it.
+  for ph in $(grep -o '{{[A-Z_]*}}' "$SKILL_DIR/templates/DREAM.md" | sort -u); do
+    [ "$ph" = "{{PLACEHOLDER}}" ] && continue
+    grep -qF "$ph" "$SKILL_DIR/reference/nightly-consolidation.md" || fail "nightly-consolidation.md does not explain $ph"
+  done
+  # Steps are referenced by number; a renumbering must not leave a dangling one.
+  for n in $(grep -o 'step [0-9]' "$SKILL_DIR/templates/DREAM.md" | awk '{ print $2 }' | sort -u); do
+    grep -q "^### $n\. " "$SKILL_DIR/templates/DREAM.md" || fail "DREAM.md refers to missing step $n"
+  done
+  if grep -n 'confidence:\*\* confirmed' "$SKILL_DIR/templates/DREAM.md"; then
+    fail "DREAM.md must not contain a confirmed example entry"
+  fi
+}
+
+test_every_client_is_pointed_at_the_guidance() {
+  assert_contains "$(cat "$SKILL_DIR/templates/AGENTS.md")" "**If \`_agent/GUIDANCE.md\` exists, read it next, every session.**" "contract points at guidance"
+  assert_contains "$(cat "$SKILL_DIR/templates/AGENTS.md")" "Don't edit \`_agent/GUIDANCE.md\`; change the entries." "live sessions change entries, not guidance"
+  grep -qx '@_agent/GUIDANCE.md' "$SKILL_DIR/templates/CLAUDE.md" || fail "CLAUDE.md must import the guidance"
+  assert_contains "$(cat "$SKILL_DIR/templates/HERMES.md")" "_agent/GUIDANCE.md" "Hermes pointer names the guidance"
+  assert_contains "$(cat "$SKILL_DIR/reference/nightly-consolidation.md")" "Set \`deliver\` and \`failure_deliver\` to local" "setup defaults to silent delivery"
+}
+
+test_skill_audit_grep_finds_confirmed_dream_entries() {
+  vault="$TMP_ROOT/audit"
+  mkdir -p "$vault/P"
+  cat > "$vault/P/JOURNAL.md" <<'EOF'
+## 2026-10-18 — ok
+
+- **type:** preference
+- **confidence:** probable
+- **source:** dream `_agent/sessions/2026-10-18-dream-h.md`
+- **status:** active
+
+## 2026-10-17 — bad
+
+- **type:** preference
+- **confidence:** confirmed
+- **source:** dream `_agent/sessions/2026-10-17-dream-h.md`
+- **status:** active
+EOF
+  pattern="$(sed -n "s/^grep -rn -B1 '\(.*dream\)' --include=JOURNAL.md.*/\1/p" "$SKILL_DIR/reference/nightly-consolidation.md")"
+  [ -n "$pattern" ] || fail "SKILL.md audit grep not found"
+  hits="$(cd "$vault" && grep -rn -B1 "$pattern" --include=JOURNAL.md . | grep 'confidence:\*\* confirmed' || true)"
+  [ "$(printf '%s\n' "$hits" | grep -c 'confidence')" -eq 1 ] || fail "audit grep should flag exactly the one confirmed dream entry: $hits"
+  case "$hits" in *probable*) fail "audit grep must not flag probable entries" ;; esac
+}
+
 test_current_state_handles_project_names_with_spaces
 printf 'PASS: project names with spaces\n'
 test_current_state_accepts_a_journal_path
@@ -424,3 +629,17 @@ test_upgrade_handles_special_characters_and_staging_failure
 printf 'PASS: upgrade handles & and | in paths, and staging failure\n'
 test_upgrade_never_writes_through_symlinks
 printf 'PASS: upgrade never writes through symlinks\n'
+test_dream_commit_makes_one_commit_per_run
+printf 'PASS: dream wrapper makes one commit per run\n'
+test_dream_commit_does_the_run_bookkeeping
+printf 'PASS: dream wrapper does the run bookkeeping\n'
+test_dream_commit_handles_a_vault_path_with_spaces
+printf 'PASS: dream wrapper handles a vault path with spaces\n'
+test_dream_commit_refuses_without_history
+printf 'PASS: dream wrapper refuses without history\n'
+test_dream_prompt_keeps_its_safety_rules
+printf 'PASS: dream prompt safety rules\n'
+test_every_client_is_pointed_at_the_guidance
+printf 'PASS: every client is pointed at the guidance\n'
+test_skill_audit_grep_finds_confirmed_dream_entries
+printf 'PASS: dream audit grep\n'
