@@ -1,7 +1,7 @@
 ---
 name: self-recording
-description: Set up a Markdown folder as durable, portable AI memory that records itself while you work — project journals, provenance metadata, git-backed undo, and auto-commit hooks. Use when someone wants their notes or project folder to become memory an AI reads and writes across sessions and clients, wants to stop re-explaining context to every new chat, wants AI-written notes kept distinguishable from their own, or asks to replicate an "Obsidian as AI memory" / "AGENTS.md vault" setup. Also use to audit or repair an existing one.
-version: 0.3.1
+description: Set up a Markdown folder as durable, portable AI memory that records itself while you work — project journals, provenance metadata, git-backed undo, and auto-commit hooks. Use when someone wants their notes or project folder to become memory an AI reads and writes across sessions and clients, wants to stop re-explaining context to every new chat, wants AI-written notes kept distinguishable from their own, or asks to replicate an "Obsidian as AI memory" / "AGENTS.md vault" setup. Also use to audit, repair, or upgrade an existing one.
+version: 0.4.0
 license: MIT
 ---
 
@@ -33,6 +33,22 @@ The second non-negotiable: **agents may never mark their own inferences as
 confirmed.** One reserved metadata value is what keeps "what I know" separable from
 "what a model guessed" when nothing is gated. Every other rule here is negotiable.
 
+## Already built? Upgrade, don't rebuild
+
+If the folder already has this system (`_tools/hook-autocommit.sh`, journals
+with a `## Current state` block, an `AGENTS.md` that says to record as you
+work), **do not run Steps 2–5 over it.** Its contract was adapted for this
+person and its tools may have been edited. Follow `reference/upgrading.md`:
+
+```bash
+bash scripts/upgrade.sh /path/to/vault           # report; changes nothing
+bash scripts/upgrade.sh /path/to/vault --apply   # replace untouched tools, stamp, commit
+```
+
+It replaces only tools identical to an older release, never contract files or
+journals, and makes one revertible commit. Contract changes are merged by hand,
+section by section, with the owner. New features are offered, never switched on.
+
 ## Step 1 — Interview before building
 
 Don't scaffold yet. You need five answers, and they change the design:
@@ -51,7 +67,8 @@ Don't scaffold yet. You need five answers, and they change the design:
 5. **How do they actually work?** Do they open a project folder and work inside it,
    or think in terms of one central notebook? Put memory where they already are —
    a design that requires them to go somewhere else to record something will be
-   abandoned.
+   abandoned. If that folder is also the working project, project-only skills go in
+   `.agents/skills/<name>/SKILL.md`; do not scaffold that directory by default.
 
 Then read `reference/design-decisions.md` and walk them through the four real
 forks. Recommend, don't survey — but state each tradeoff honestly.
@@ -193,6 +210,12 @@ reviewed, file-scoped checkpoint workflow. If the vault is under
 for `/bin/bash`; the installer detects the failure and prints the steps. That
 grant is broad — say so. See `reference/pitfalls.md` 4a and 4b.
 
+**Finally, stamp the version** so a later upgrade knows what it is looking at:
+
+```bash
+bash scripts/upgrade.sh /path/to/vault --apply   # on a new vault: writes the stamp, commits
+```
+
 ## Step 6 — Verify, with real work
 
 Synthetic tests measure compliance, not judgment. Telling an agent "record this in
@@ -253,15 +276,18 @@ They bought frictionlessness with accumulated noise. That's usually the right tr
 ## Reference
 
 - `reference/design-decisions.md` — the four forks, with tradeoffs and recommendations
+- `reference/upgrading.md` — upgrading an established vault, per version
+- `reference/script-hashes.txt` — release manifest `upgrade.sh` checks tools against
 - `reference/pitfalls.md` — traps that cost real debugging: cloud sync vs `.git`,
   line-ending churn, silent hook failure, `SessionEnd` not firing, sandboxed clients
   that can't commit, Full Disk Access for launchd, stale contract files, journals
-  outgrowing context
+  outgrowing context, upgrading over an adapted contract
 - `templates/` — `AGENTS.md`, `CLAUDE.md`, `HERMES.md` (→ `.hermes.md`),
   `MEMORY-SCHEMA.md`, `JOURNAL.md`, `_archive/README.md`
 - `scripts/` — `setup-history.sh`, `install-hooks.sh`, `hook-autocommit.sh`,
   `install-autocommit-agent.sh` + `launchd/`, `check-current-state.sh`,
-  `new-project.sh`, `archive-project.sh`, `vgit`
+  `new-project.sh`, `archive-project.sh`, `vgit` (vault tools); `upgrade.sh`
+  (runs from the skill)
 
 ## Adapting, not copying
 
