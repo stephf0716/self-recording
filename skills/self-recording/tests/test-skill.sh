@@ -243,7 +243,9 @@ test_upgrade_replaces_only_untouched_tools() {
   assert_contains "$report" "UPDATE    check-current-state.sh (matches 0.0.1)" "older untouched tool is UPDATE"
   assert_contains "$report" "MODIFIED  install-hooks.sh" "edited tool is MODIFIED"
   assert_contains "$report" "OK        hook-autocommit.sh" "current tool is OK"
-  assert_contains "$report" "Built:  0.0.1 (inferred; no stamp)" "version inferred from untouched tools"
+  assert_contains "$report" "Built:  unstamped" "no stamp is reported as unstamped"
+  assert_contains "$report" "each version after
+0.0.1 --" "merge list starts at the oldest release"
   assert_contains "$report" "1 journal(s) use date-only markers" "legacy markers reported"
   [ ! -f "$vault/_tools/.self-recording-version" ] || fail "report mode must not write the stamp"
 
@@ -256,7 +258,7 @@ test_upgrade_replaces_only_untouched_tools() {
   [ "$(cat "$vault/_tools/.self-recording-version")" = "$(skill_version)" ] || fail "stamp not written"
 
   log="$(git --git-dir="$vault.git" log --format=%s -3)"
-  assert_contains "$log" "upgrade: self-recording 0.0.1 -> $(skill_version)" "one upgrade commit"
+  assert_contains "$log" "upgrade: self-recording unstamped -> $(skill_version)" "one upgrade commit"
   assert_contains "$log" "pre-upgrade: 1 file(s) changed" "drift committed separately first"
   [ -z "$(git --git-dir="$vault.git" status --porcelain)" ] || fail "tree should be clean after upgrade"
   git --git-dir="$vault.git" show --stat --format= HEAD | grep -q drift.md \
@@ -264,35 +266,6 @@ test_upgrade_replaces_only_untouched_tools() {
 
   again="$(VAULT_GIT_DIR="$vault.git" bash "$skill/scripts/upgrade.sh" "$vault")"
   assert_contains "$again" "Tools are current." "second run is a no-op"
-}
-
-test_upgrade_reports_ambiguous_version_as_a_range() {
-  vault="$TMP_ROOT/ambiguous"
-  mkdir -p "$vault/_tools"
-  VAULT_GIT_DIR="$vault.git" bash "$SKILL_DIR/scripts/setup-history.sh" "$vault" >/dev/null 2>&1 \
-    || fail "setup-history failed for $vault"
-
-  out="$(VAULT_GIT_DIR="$vault.git" bash "$SKILL_DIR/scripts/upgrade.sh" "$vault")"
-  assert_contains "$out" "Built:  unknown (no stamp, and no untouched tool" "no evidence is not a version"
-
-  # setup-history.sh alone: every release it is identical in stays a candidate.
-  cp "$SKILL_DIR/scripts/setup-history.sh" "$vault/_tools/"
-  h="$(blob "$vault/_tools/setup-history.sh")"
-  range="$(awk -v h="$h" '!/^#/ && NF==3 && $2==h && $3=="setup-history.sh" { print $1 }' \
-    "$SKILL_DIR/reference/script-hashes.txt")"
-  lo="$(echo $range | awk '{ print $1 }')"
-  hi="$(echo $range | awk '{ print $NF }')"
-  [ "$lo" != "$hi" ] || return 0   # manifest no longer has a shared copy to test with
-  out="$(VAULT_GIT_DIR="$vault.git" bash "$SKILL_DIR/scripts/upgrade.sh" "$vault")"
-  assert_contains "$out" "Built:  $lo..$hi (inferred" "shared tool gives a range, not the newest"
-  assert_contains "$out" "each version after
-$lo --" "merge list starts at the oldest candidate"
-  assert_contains "$out" "compare before merging" "owner told the range may overlap the contract"
-
-  VAULT_GIT_DIR="$vault.git" bash "$SKILL_DIR/scripts/upgrade.sh" "$vault" --apply >/dev/null \
-    || fail "upgrade --apply failed"
-  assert_contains "$(git --git-dir="$vault.git" log --format=%s -1)" \
-    "upgrade: self-recording $lo..$hi -> $(skill_version)" "commit names the range"
 }
 
 test_upgrade_refuses_another_vaults_history() {
@@ -409,8 +382,6 @@ test_manifest_matches_current_scripts
 printf 'PASS: release manifest matches scripts\n'
 test_upgrade_replaces_only_untouched_tools
 printf 'PASS: upgrade replaces only untouched tools\n'
-test_upgrade_reports_ambiguous_version_as_a_range
-printf 'PASS: upgrade reports an ambiguous version as a range\n'
 test_upgrade_refuses_without_history_or_from_tools
 printf 'PASS: upgrade refuses unsafe runs\n'
 test_upgrade_refuses_another_vaults_history

@@ -39,10 +39,9 @@ bash scripts/upgrade.sh /path/to/vault --apply # replace untouched tools, stamp,
 
 Then, for every version after the one the report says the vault was built
 with, work through that version's section below. `_tools/.self-recording-version`
-records the result; vaults from before 0.4.0 have no stamp, and the report
-infers the version from the tools instead. When several releases ship identical
-copies of the tools it finds, it reports the range and starts the list from
-the oldest; check each section against the contract before merging it.
+records the result. Vaults from before 0.4.0 have no stamp, so the report
+starts from the oldest release; check each section against the contract before
+merging it, since some may already be there.
 
 If the vault has **no version history**, stop. Set it up first (SKILL.md
 Step 2). An upgrade with no undo is exactly the unreviewed write the design

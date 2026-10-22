@@ -313,10 +313,4 @@ overwrites an adapted `AGENTS.md` with the template, fails partway when
 fixed tools in `_tools/` — a vault built from 0.3.0 still had a
 `check-current-state.sh` that could not see same-day decisions.
 
-**Fix:** `scripts/upgrade.sh` reports which tools are current, which are untouched
-copies of an older release (safe to replace), and which were edited locally
-(merge by hand); when several releases ship identical tools it reports the
-range rather than guessing the newest; `--apply` replaces only the safe ones, stamps
-`_tools/.self-recording-version`, and commits once. Contract merges follow
-`reference/upgrading.md`, with the owner. Journals are not migrated; old entries
-stay as written.
+**Fix:** upgrade instead: `scripts/upgrade.sh`, per `reference/upgrading.md`.

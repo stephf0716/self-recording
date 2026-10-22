@@ -68,8 +68,6 @@ STAMPED=""
 
 UPDATES=""
 MODIFIED=0
-EVIDENCE=0               # untouched tools the version was inferred from
-CANDIDATES="$VERSIONS"   # versions consistent with every untouched tool
 
 while IFS= read -r t; do
   src="$SKILL_DIR/scripts/$t"
@@ -90,40 +88,20 @@ while IFS= read -r t; do
     else
       printf '  MODIFIED  %s -- edited locally; diff against %s and merge by hand\n' "$t" "$src"
       MODIFIED=$((MODIFIED + 1))
-      continue
     fi
   fi
-  # Narrow the inferred vault version to releases this tool is identical to.
-  EVIDENCE=$((EVIDENCE + 1))
-  matches="$(versions_with "$h" "$t")"
-  keep=""
-  for v in $CANDIDATES; do
-    case " $matches " in *" $v "*) keep="$keep $v" ;; esac
-  done
-  CANDIDATES="$keep"
 done <<EOF
 $TOOL_LIST
 EOF
 
-# FROM_SHORT is where the per-version merge list starts. When the tools can't
-# pin one release, start from the oldest one they allow: walking a section the
+# Where the per-version merge list starts. No stamp means the vault predates
+# stamps (0.4.0), so start from the oldest release: walking a section the
 # contract already has costs a read, skipping one it lacks loses the change.
-OLDEST="$(echo $VERSIONS | awk '{ print $1 }')"
 if [ -n "$STAMPED" ]; then
   FROM="$STAMPED"; FROM_SHORT="$STAMPED"
-elif [ "$EVIDENCE" -eq 0 ]; then
-  FROM="unknown (no stamp, and no untouched tool to infer from)"; FROM_SHORT="$OLDEST"
-elif [ -z "$(echo $CANDIDATES)" ]; then
-  FROM="unknown (no stamp; untouched tools come from different releases)"; FROM_SHORT="$OLDEST"
 else
-  lo="$(echo $CANDIDATES | awk '{ print $1 }')"
-  hi="$(echo $CANDIDATES | awk '{ print $NF }')"
-  FROM_SHORT="$lo"
-  if [ "$lo" = "$hi" ]; then
-    FROM="$lo (inferred; no stamp)"
-  else
-    FROM="$lo..$hi (inferred; no stamp; these releases ship identical copies of its tools)"
-  fi
+  FROM_SHORT="$(echo $VERSIONS | awk '{ print $1 }')"
+  FROM="unstamped (built before 0.4.0, or setup skipped the stamp)"
 fi
 echo "Built:  $FROM"
 FROM_LABEL="${FROM%% *}"
@@ -144,9 +122,9 @@ echo
 echo "Contract files (AGENTS.md, pointers, MEMORY-SCHEMA.md) are never changed by"
 echo "this script. Merge what reference/upgrading.md lists for each version after"
 echo "$FROM_SHORT -- section by section, with the owner's agreement."
-[ "$FROM_LABEL" = "$FROM_SHORT" ] || {
-  echo "$FROM_SHORT is the oldest release it could be (or the oldest this script"
-  echo "knows), so some sections may already be in its contract: compare before merging."; }
+[ -n "$STAMPED" ] || {
+  echo "With no stamp that starts at the oldest release, so some sections may"
+  echo "already be in its contract: compare before merging."; }
 [ "$MODIFIED" -gt 0 ] && echo "MANUAL: $MODIFIED locally modified tool(s) above."
 
 if [ "$APPLY" -eq 0 ]; then

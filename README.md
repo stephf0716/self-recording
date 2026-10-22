@@ -60,11 +60,9 @@ my AI remembers between sessions."
 **It interviews you before building anything.** It does not assume your setup
 matches anyone else's.
 
-**Already have a vault from an earlier version?** Ask it to upgrade. It checks
-`_tools/` against every release, replaces only untouched copies, never
-overwrites your adapted `AGENTS.md` or journals, and commits once
-(`reference/upgrading.md`). When it can't tell exactly which release built the
-vault, it reports the range and starts from the oldest.
+**Already have a vault from an earlier version?** Ask it to upgrade, not to set
+up again: it replaces only untouched tools and leaves your `AGENTS.md` and
+journals alone (`reference/upgrading.md`).
 
 ## The idea
 
