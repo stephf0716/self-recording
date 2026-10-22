@@ -29,7 +29,7 @@ set -u
 
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" || exit 1
 MANIFEST="$SKILL_DIR/reference/script-hashes.txt"
-CURRENT="$(sed -n 's/^version:[[:space:]]*//p' "$SKILL_DIR/SKILL.md" | head -1)"
+CURRENT="$(tr -d '\r' < "$SKILL_DIR/SKILL.md" 2>/dev/null | sed -n 's/^version:[[:space:]]*//p' | head -1)"
 
 [ -f "$SKILL_DIR/SKILL.md" ] && [ -f "$MANIFEST" ] || {
   echo "ERROR: run this from the skill directory (scripts/ next to SKILL.md and" >&2
@@ -47,15 +47,17 @@ STAMP_FILE="$TOOLS/.self-recording-version"
 [ "$TOOLS" != "$SKILL_DIR/scripts" ] || { echo "ERROR: that is the skill itself, not a vault." >&2; exit 1; }
 
 hash_of() { tr -d '\r' < "$1" | git hash-object --stdin; }
+# A CRLF checkout must parse like LF: strip carriage returns from the manifest too.
+manifest() { tr -d '\r' < "$MANIFEST"; }
 
 # Release order is manifest order; no version-sort needed.
-VERSIONS="$(awk '!/^#/ && NF==3 && !seen[$1]++ { print $1 }' "$MANIFEST")"
-TOOL_LIST="$(awk -v v="$CURRENT" '!/^#/ && NF==3 && $1==v { print $3 }' "$MANIFEST")"
+VERSIONS="$(manifest | awk '!/^#/ && NF==3 && !seen[$1]++ { print $1 }')"
+TOOL_LIST="$(manifest | awk -v v="$CURRENT" '!/^#/ && NF==3 && $1==v { print $3 }')"
 [ -n "$TOOL_LIST" ] || { echo "ERROR: manifest has no rows for version $CURRENT" >&2; exit 1; }
 
 # Versions whose copy of $2 has hash $1, space-separated, release order.
 versions_with() {
-  awk -v h="$1" -v p="$2" '!/^#/ && NF==3 && $2==h && $3==p { printf "%s ", $1 }' "$MANIFEST"
+  manifest | awk -v h="$1" -v p="$2" '!/^#/ && NF==3 && $2==h && $3==p { printf "%s ", $1 }'
 }
 
 echo "Skill:  $SKILL_DIR ($CURRENT)"
@@ -177,14 +179,19 @@ else
   fi
 fi
 
-if [ -n "$(g status --porcelain -uall)" ]; then
-  n="$(g status --porcelain -uall | grep -c .)"
+# Nothing is written until the history is readable and has a baseline to undo to.
+st="$(g status --porcelain -uall)" || {
+  echo "ERROR: cannot read the vault's history; nothing was changed." >&2; exit 1; }
+g rev-parse --verify -q HEAD >/dev/null || {
+  echo "ERROR: the vault's history has no commits to undo to; nothing was changed." >&2; exit 1; }
+if [ -n "$st" ]; then
+  n="$(printf '%s\n' "$st" | grep -c .)"
   g add -A && g commit -q -m "pre-upgrade: $n file(s) changed" \
     -m "Drift already in the vault, committed separately so the upgrade commit holds only the upgrade." \
     || { echo "ERROR: could not commit existing changes." >&2; exit 1; }
 fi
 
-start="$(g rev-parse HEAD 2>/dev/null)"
+start="$(g rev-parse HEAD)" || { echo "ERROR: cannot read HEAD; nothing was changed." >&2; exit 1; }
 
 replaced=""
 while IFS= read -r t; do

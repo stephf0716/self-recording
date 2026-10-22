@@ -187,7 +187,7 @@ export GIT_COMMITTER_NAME=test GIT_COMMITTER_EMAIL=test@example.invalid
 
 blob() { tr -d '\r' < "$1" | git hash-object --stdin; }
 
-skill_version() { sed -n 's/^version:[[:space:]]*//p' "$SKILL_DIR/SKILL.md" | head -1; }
+skill_version() { tr -d '\r' < "$SKILL_DIR/SKILL.md" | sed -n 's/^version:[[:space:]]*//p' | head -1; }
 
 # A vault with every current vault tool in _tools/ and detached history.
 make_vault() {
@@ -341,6 +341,34 @@ test_upgrade_handles_special_characters_and_staging_failure() {
   assert_contains "$out" "the upgrade is NOT recorded" "says the stamp was not written"
 }
 
+test_upgrade_parses_a_crlf_checkout() {
+  skill="$TMP_ROOT/crlf-skill"
+  cp -R "$SKILL_DIR" "$skill"
+  for f in SKILL.md reference/script-hashes.txt; do
+    awk '{ printf "%s\r\n", $0 }' "$SKILL_DIR/$f" > "$skill/$f"
+  done
+  vault="$TMP_ROOT/crlf-vault"
+  make_vault "$vault"
+  out="$(VAULT_GIT_DIR="$vault.git" bash "$skill/scripts/upgrade.sh" "$vault")" || fail "report failed on a CRLF checkout"
+  assert_contains "$out" "OK        hook-autocommit.sh" "CRLF manifest still matches installed tools"
+  case "$out" in *ABSENT*) fail "CRLF manifest must not report installed tools as ABSENT: $out" ;; esac
+}
+
+test_upgrade_refuses_an_unreadable_history() {
+  vault="$TMP_ROOT/broken-history"
+  make_vault "$vault"
+  rm -rf "$vault.git/objects" "$vault.git/HEAD"
+  mkdir -p "$vault.git"
+  before="$(blob "$vault/_tools/check-current-state.sh")"
+  set +e
+  out="$(VAULT_GIT_DIR="$vault.git" bash "$SKILL_DIR/scripts/upgrade.sh" "$vault" --apply 2>&1)"
+  status=$?
+  set -e
+  [ "$status" -ne 0 ] || fail "--apply must stop when the history cannot be read"
+  assert_contains "$out" "nothing was changed" "says the vault was left alone"
+  [ ! -f "$vault/_tools/.self-recording-version" ] || fail "no stamp without a readable history"
+}
+
 test_upgrade_refuses_without_history_or_from_tools() {
   vault="$TMP_ROOT/no-history"
   mkdir -p "$vault/_tools"
@@ -387,5 +415,9 @@ test_upgrade_refuses_without_history_or_from_tools
 printf 'PASS: upgrade refuses unsafe runs\n'
 test_upgrade_refuses_another_vaults_history
 printf "PASS: upgrade refuses another vault's history\n"
+test_upgrade_parses_a_crlf_checkout
+printf 'PASS: upgrade parses a CRLF checkout\n'
+test_upgrade_refuses_an_unreadable_history
+printf 'PASS: upgrade refuses an unreadable history\n'
 test_upgrade_handles_special_characters_and_staging_failure
 printf 'PASS: upgrade handles & and | in paths, and staging failure\n'
