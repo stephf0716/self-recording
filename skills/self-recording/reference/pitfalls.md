@@ -302,3 +302,15 @@ journal" rule. Underscore-prefixed folders are infrastructure; don't put a
 journal there. `find -maxdepth 2 -name JOURNAL.md -not -path './_*'` already
 skips them — do not change that exclusion to "see" archived journals, or they
 become live again.
+
+---
+
+## 14. Re-running setup on an established vault
+
+Pointing the skill at a vault it already built and following Steps 2–5 again
+overwrites an adapted `AGENTS.md` with the template, fails partway when
+`install-hooks.sh` refuses existing hooks, and silently leaves older copies of
+fixed tools in `_tools/` — a vault built from 0.3.0 still had a
+`check-current-state.sh` that could not see same-day decisions.
+
+**Fix:** upgrade instead: `scripts/upgrade.sh`, per `reference/upgrading.md`.

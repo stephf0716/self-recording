@@ -60,6 +60,10 @@ my AI remembers between sessions."
 **It interviews you before building anything.** It does not assume your setup
 matches anyone else's.
 
+**Already have a vault from an earlier version?** Ask it to upgrade, not to set
+up again: it replaces only untouched tools and leaves your `AGENTS.md` and
+journals alone (`reference/upgrading.md`).
+
 ## The idea
 
 Durable memory lives in Markdown you own. Swap Claude for Copilot for Hermes
@@ -113,8 +117,9 @@ Nothing is gated, but nothing is disguised either.
 | `skills/self-recording/SKILL.md` | The workflow: interview → decide → history → contract → automate → verify |
 | `reference/design-decisions.md` | Four real design forks, with honest costs, and what *not* to build yet |
 | `reference/pitfalls.md` | Traps that each cost real debugging |
+| `reference/upgrading.md` | Upgrading an established vault, per version |
 | `templates/` | `AGENTS.md`, client pointers (`CLAUDE.md`, `HERMES.md`), `MEMORY-SCHEMA.md`, `JOURNAL.md`, `_archive/README.md` |
-| `scripts/` | History setup, Claude hook installer, auto-commit, launchd sweep, current-state checker, project scaffolder, archiver |
+| `scripts/` | History setup, Claude hook installer, auto-commit, launchd sweep, current-state checker, project scaffolder, archiver, upgrader |
 
 `reference/pitfalls.md` is worth reading even if you let the AI drive.
 
@@ -135,5 +140,5 @@ bash skills/self-recording/tests/test-skill.sh
 
 ## Status and licensing
 
-Version 0.3.1. MIT. Built from a working setup rather than designed in the
+Version 0.4.0. MIT. Built from a working setup rather than designed in the
 abstract — every item in `pitfalls.md` cost real debugging time.
