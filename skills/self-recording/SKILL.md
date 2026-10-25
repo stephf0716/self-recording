@@ -280,7 +280,7 @@ What makes it survivable, and worth saying plainly:
 - `confidence: probable` is greppable, so an audit is possible whenever they want.
 
 A nightly consolidation job, if enabled, adds a second unattended writer: one
-that reads transcripts rather than taking part in them. Its entries are
+that reads the vault's records rather than taking part in sessions. Its entries are
 `probable` or `unverified`, cite a dream log, and revert as one commit — but it
 will sometimes record a passing remark as a preference.
 

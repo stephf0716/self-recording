@@ -530,6 +530,10 @@ test_dream_prompt_keeps_its_safety_rules() {
   assert_contains "$d" "**How to work, never what to do.**" "guidance cannot carry actions"
   assert_contains "$d" "never overrides \`AGENTS.md\`" "guidance never outranks the contract"
   assert_contains "$d" "dismissals" "harvest looks at friction"
+  assert_contains "$d" "except dream logs" "harvest reads every host's session notes"
+  assert_contains "$d" "journal entries added or changed in the window" "harvest reads journal changes from history"
+  assert_contains "$d" "Never read another harness's transcripts" "dream never harvests harness transcripts"
+  assert_contains "$d" "as a supplement, never as" "session_search is only a supplement"
   assert_contains "$d" "is the run's log, not a message" "report is not delivered as a message"
   if grep -n "delivered to" "$SKILL_DIR/templates/DREAM.md"; then
     fail "DREAM.md must not assume the report is delivered to the owner"

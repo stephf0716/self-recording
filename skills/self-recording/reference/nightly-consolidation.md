@@ -1,6 +1,7 @@
 # Nightly consolidation ("dream")
 
-Optional. A scheduled job that reads the day's sessions, appends the
+Optional. A scheduled job that reads the day's vault records (session notes
+from every host and client, and journal changes), appends the
 decisions, preferences, and lessons nobody journaled, rewrites
 `_agent/GUIDANCE.md` (how every agent should work with the owner), refreshes
 stale `## Current state` blocks, flags due `review_after` dates, and rebuilds
@@ -9,6 +10,16 @@ the harness's own small memory from the vault. The prompt is
 
 Offer it once the contract works and history is automated, not before. Never
 enable it unasked.
+
+## What it reads
+
+The harvest reads what agents already wrote into the vault: the window's
+`_agent/sessions/` notes from every host and client (dream logs excluded) and
+the journal entries that vault history shows were added or changed. On Hermes,
+`session_search` can add the host's own sessions as a supplement; it sees only
+that host, so it is never the only source. The job never reads another
+harness's transcripts. Every agent records into the vault itself, wherever it
+runs, and the dream synthesizes those records.
 
 ## Why the guidance file
 
