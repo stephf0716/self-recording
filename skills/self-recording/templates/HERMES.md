@@ -8,7 +8,8 @@ still hits the same rules if AGENTS.md is skipped or truncated.
 # .hermes.md
 
 **Read `AGENTS.md` in this directory now.** It is the contract and it applies in
-full to this session.
+full to this session. Then read `_agent/GUIDANCE.md` if it exists: how
+{{OWNER}} wants to be worked with.
 
 This file is deliberately a pointer, not a copy — the contract lives in one place so
 it cannot drift between clients.

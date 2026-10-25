@@ -109,6 +109,14 @@ Nothing is gated, but nothing is disguised either.
   unreviewable a year later.
 - **Project archive** — move an inactive project to `_archive/<Folder-Name>/`
   with the same name; only a top-level `JOURNAL.md` is live.
+- **Nightly consolidation (optional)** — a scheduled "dream" job (Hermes cron as
+  the worked case) that journals what the day's sessions decided but never
+  recorded, looking hardest at corrections and dismissed suggestions. It then
+  rewrites `_agent/GUIDANCE.md`, a short "how to work with you" file that every
+  agent reads at the start of every session, so a correction given to one agent
+  reaches all of them by morning. Every line in it cites the journal entry
+  behind it. It runs silently, never writes `confirmed`, and makes one commit
+  per night.
 
 ## Contents
 
@@ -118,8 +126,9 @@ Nothing is gated, but nothing is disguised either.
 | `reference/design-decisions.md` | Four real design forks, with honest costs, and what *not* to build yet |
 | `reference/pitfalls.md` | Traps that each cost real debugging |
 | `reference/upgrading.md` | Upgrading an established vault, per version |
-| `templates/` | `AGENTS.md`, client pointers (`CLAUDE.md`, `HERMES.md`), `MEMORY-SCHEMA.md`, `JOURNAL.md`, `_archive/README.md` |
-| `scripts/` | History setup, Claude hook installer, auto-commit, launchd sweep, current-state checker, project scaffolder, archiver, upgrader |
+| `reference/nightly-consolidation.md` | The optional nightly job: why, setup, verification |
+| `templates/` | `AGENTS.md`, client pointers (`CLAUDE.md`, `HERMES.md`), `MEMORY-SCHEMA.md`, `JOURNAL.md`, `_archive/README.md`, `DREAM.md` |
+| `scripts/` | History setup, Claude hook installer, auto-commit, launchd sweep, current-state checker, project scaffolder, archiver, upgrader, dream commit wrapper |
 
 `reference/pitfalls.md` is worth reading even if you let the AI drive.
 
@@ -140,5 +149,5 @@ bash skills/self-recording/tests/test-skill.sh
 
 ## Status and licensing
 
-Version 0.4.0. MIT. Built from a working setup rather than designed in the
+Version 0.5.0. MIT. Built from a working setup rather than designed in the
 abstract — every item in `pitfalls.md` cost real debugging time.

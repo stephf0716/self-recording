@@ -13,6 +13,11 @@ asked.
 
 Companion files: `MEMORY-SCHEMA.md` (metadata contract), `README.md` (the human guide).
 
+**If `_agent/GUIDANCE.md` exists, read it next, every session.** It is how
+{{OWNER}} wants to be worked with: standing preferences, boundaries, and where
+agents keep missing, each pointing at the journal entry behind it. It never
+overrides this contract.
+
 ---
 
 ## The core rule: write memory as you go
@@ -237,3 +242,25 @@ dir is outside it by design. `vgit log` works; `vgit commit` fails with
 while you are editing from such a client, the sweep is not running — tell
 {{OWNER}}, and be conservative with edits to existing files until it is. Install
 it (macOS, from a terminal): `bash _tools/install-autocommit-agent.sh`.
+
+## Nightly consolidation (only if enabled — delete this section otherwise)
+
+A scheduled job ({{DREAM_SCHEDULE — e.g. "Hermes cron, 03:10"}}) reads the
+day's sessions, appends whatever was decided but never journaled, and rewrites
+`_agent/GUIDANCE.md` from the journals. Its entries cite
+`source: dream _agent/sessions/YYYY-MM-DD-dream-<host>.md`, and each run is one
+`dream: YYYY-MM-DD` commit. It runs silently; its reports are logs, not messages.
+
+- **You still record as you work.** The job is a net for what sessions miss,
+  not a reason to skip an entry.
+- Its entries are never `confirmed`. When {{OWNER}} confirms one in
+  conversation, change that entry's `confidence:` to `confirmed` and say so in
+  the body. That edit is theirs to make through you, not the job's.
+- **Don't edit `_agent/GUIDANCE.md`; change the entries.** The job rebuilds it
+  from the journals each night, so a direct edit is lost. When {{OWNER}}
+  corrects how you work, record a `lesson` or `preference` entry, and the next
+  run carries it to every agent.
+- {{HARNESS_MEMORY — e.g. "Hermes USER.md and MEMORY.md"}} is a digest the job
+  rebuilds from this vault each night. Record durable things here, not only
+  there: the job salvages digest-only lines as `probable` at best, then
+  rewrites the digest.

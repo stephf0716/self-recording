@@ -172,6 +172,27 @@ Hermes gateway is running, so read back the job state and verify
 
 ---
 
+## 4e. A dream run is one commit only if nothing else commits mid-run
+
+The nightly consolidation job promises one `dream: YYYY-MM-DD` commit per run, so
+a bad night reverts in one step. But the scheduled sweep, a Claude `Stop` hook, or
+a Hermes autocommit cron can fire while the job is still writing, and capture half
+of its changes in a `sweep:` or `checkpoint:` commit. (Reproduced in a test
+vault; not yet seen live.)
+
+**Fix:** `scripts/hermes/dream-commit.sh begin` commits pre-existing drift as
+`pre-dream:` and records where the run started; `end` warns when other commits
+landed in between and prints the full revert range. Schedule the job away from
+active hours so this is rare, and pass the warning on in the report rather than
+pretending the single-commit undo still holds.
+
+**Related:** the harness memory the job rebuilds (`$HERMES_HOME/memories/`) is
+outside the vault and its history. `begin` copies it to `memories/.dream-backup/`,
+one directory per run so a same-day retry cannot overwrite the snapshot from
+before a bad rebuild, and keeps the last 7 runs; that copy is its only undo.
+
+---
+
 ## 5. Sandboxed agents can't write the places you'd expect
 
 An agent may be blocked from `.claude/settings.json`, `.claude/skills/`, `~/.claude/`,
@@ -314,3 +335,39 @@ fixed tools in `_tools/` — a vault built from 0.3.0 still had a
 `check-current-state.sh` that could not see same-day decisions.
 
 **Fix:** upgrade instead: `scripts/upgrade.sh`, per `reference/upgrading.md`.
+
+---
+
+## 15. Nightly consolidation feeds on itself, and erases what it never saw
+
+Ways an unattended consolidation job ("dream", `templates/DREAM.md`) goes
+wrong. The first four came from design review and Hermes's own documentation;
+the rest turned up in the first live install (Hermes, October 2026):
+
+- **Self-feeding.** Each scheduled run is itself a session. Without an
+  exclusion, the next night consolidates the previous night's output and
+  restates it with more confidence than it earned. The prompt skips scheduled
+  sessions.
+- **Digest-only memory.** The harness saves to its own memory files during the
+  day. Rebuilding that digest from the vault deletes anything it never got into
+  the vault — on an established vault, possibly months of it. The job harvests
+  digest-only lines first, and its first run does not rebuild at all, so the
+  owner sees the harvest before anything is removed.
+- **Injected instructions.** Sessions contain fetched pages and emails. A
+  scheduled run may not get the contract injected, so the untrusted-content rule
+  must be in the job's own prompt. It also never creates skills, which would turn
+  a stray instruction in a web page into something every later session obeys.
+- **The guidance file is the prize.** `_agent/GUIDANCE.md` is read by every
+  agent, every session, so one planted line there steers all of them. The job
+  builds it only from journal entries (which carry provenance), never from
+  session text, excludes `unverified`, and keeps it to how to work, never what
+  to do.
+- **A nightly chat message.** Left to choose, the agent delivered the report to
+  the owner's chat, which defeats a background job. Setup now sets delivery to
+  local; the report is a log.
+- **Same-day logs overwrite each other.** A supervised first run and the first
+  scheduled run can land on the same date. The second now takes a `-2` suffix.
+- **The model guesses bookkeeping.** Asked to write the run's end time, it
+  wrote 03:14 for a run that ended at 03:10; the next window starts there, so
+  a late guess skips sessions. Picking the log, the window and the
+  `completed:` time is now `dream-commit.sh`'s job, not the prompt's.

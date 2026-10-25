@@ -69,3 +69,32 @@ next time each block is regenerated.
 **Tools:** none changed. `--apply` writes the version stamp.
 
 **Contract and journals:** none changed.
+
+## 0.4.0 → 0.5.0
+
+**Tools:** none changed. `--apply` updates the stamp.
+
+**New, optional — nightly consolidation ("dream").** Not enabled by upgrading.
+If the owner wants it, follow `reference/nightly-consolidation.md`,
+including the supervised first run. It adds:
+
+- `templates/DREAM.md` — the job prompt, filled in for this vault.
+- `_agent/GUIDANCE.md` — written by the job, read by every session. Add the
+  paragraph that points at it near the top of the vault's `AGENTS.md`, and the
+  guidance line to each pointer file (`templates/CLAUDE.md`,
+  `templates/HERMES.md`).
+- `scripts/hermes/dream-commit.sh` — copied to `$HERMES_HOME/scripts/`, not
+  `_tools/`. `upgrade.sh` does not track it; diff it by hand on later upgrades.
+- The "Nightly consolidation" section at the end of `templates/AGENTS.md` —
+  merge it into the vault's contract only once the job is enabled.
+
+The job's summary step runs `_tools/check-current-state.sh`. If the report
+shows it `ABSENT`, the job skips summaries and says so; copy it from
+`scripts/` first if the owner wants them refreshed.
+
+Established vaults need care that a new one does not: months of Hermes memory
+may exist only in `USER.md` / `MEMORY.md`. The job's first run harvests those
+into the vault and deliberately does not rebuild them; the owner reviews the
+harvest before the second run does. Do not backfill weeks of old sessions in
+one unattended run; if the owner wants a backfill, do it in a live session, a
+week at a time.
