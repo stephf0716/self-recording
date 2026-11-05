@@ -5,7 +5,9 @@
 Two shapes of durable memory, both plain Markdown, both greppable without a database.
 
 1. **Journal entries** — `<project>/JOURNAL.md`. Append-only, newest at top. Where
-   most memory lands, because it's where the work happens.
+   most memory lands, because it's where the work happens. Older entries may be
+   rolled out verbatim into `<project>/journal/YYYY-MM.md` (newest first) by
+   `_tools/rotate-journal.sh`; they are the same memory, in a smaller file.
 2. **Standalone notes** — `{{NOTES_DIR}}/`. Cross-project material, meetings, people.
    File-level YAML frontmatter.
 
@@ -26,7 +28,7 @@ frontmatter can only apply to a whole file:
 Body: what was decided or learned, and **what was rejected and why**.
 ```
 
-Greppable: `grep -B2 -A6 "confidence: probable" <project>/JOURNAL.md`
+Greppable: `grep -rn -B2 -A6 "confidence: probable" --include=JOURNAL.md --include='20??-??.md' <project>/`
 
 ## Standalone note frontmatter
 
@@ -63,6 +65,7 @@ tags: [example]
 | `reference` | Pointer to an external standard or system of record |
 | `session` | AI session log, in `_agent/sessions/` |
 | `journal` | The journal file itself |
+| `journal-archive` | A `journal/YYYY-MM.md` month file of rolled-out entries; frontmatter also has `project:` and `period: YYYY-MM` |
 
 ### `status`
 
@@ -133,10 +136,11 @@ Because nothing is gated up front, these queries are what make review possible
 whenever it's wanted:
 
 ```bash
-grep -rn "confidence: probable" --include=JOURNAL.md .   # everything unreviewed
-grep -rn "status: superseded" --include=JOURNAL.md .     # what changed its mind
+grep -rn "confidence: probable" --include=JOURNAL.md --include='20??-??.md' .   # everything unreviewed
+grep -rn "status: superseded" --include=JOURNAL.md --include='20??-??.md' .     # what changed its mind
 grep -rln "review_after: 2026-0" .                       # coming due
 bash _tools/check-current-state.sh                       # summaries out of date?
+bash _tools/rotate-journal.sh                            # any journal too big? (dry run)
 _tools/vgit log --oneline                                # session by session
 _tools/vgit diff HEAD~1                                  # what the last one did
 ```

@@ -69,3 +69,30 @@ next time each block is regenerated.
 **Tools:** none changed. `--apply` writes the version stamp.
 
 **Contract and journals:** none changed.
+
+## 0.4.0 → 0.5.0
+
+**Tools:** `check-current-state.sh` now counts decisions in `journal/*.md` as well
+as `JOURNAL.md` — replaced by `--apply` if untouched. If it is MODIFIED, merge
+the `jdir` / `set --` block and the `FNR == 1` reset by hand, or rotation will
+make counted markers STALE.
+
+**New, opt-in:** `rotate-journal.sh` rolls the oldest entries of a journal past
+~60 KB into `<project>/journal/YYYY-MM.md`, verbatim. The report shows it
+`ABSENT`; that is expected. Offer it when a journal is large. To enable:
+
+```bash
+cp scripts/rotate-journal.sh /path/to/vault/_tools/
+bash /path/to/vault/_tools/rotate-journal.sh          # dry run first; show the owner
+bash /path/to/vault/_tools/rotate-journal.sh --apply  # then commit it as its own boundary
+```
+
+Install `check-current-state.sh` 0.5.0 first, or the checker will undercount.
+
+**Contract — merge into the vault's `AGENTS.md` and `MEMORY-SCHEMA.md`** only if
+rotation is enabled: the "Keeping journals small: `journal/` rollover" section of
+`templates/AGENTS.md`, the `journal-archive` type, and audit greps that also
+`--include='20??-??.md'`.
+
+**Journals:** untouched until the owner runs `--apply`. Rotation moves whole
+entries only and adds one pointer line above `## Current state`.

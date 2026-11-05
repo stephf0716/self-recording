@@ -285,6 +285,22 @@ is why `STALE` is a warning, not an error — the entries are still authoritativ
 and the block can be rebuilt from them. Run the check in the session-start hook if
 drift becomes chronic.
 
+**Second failure mode: size.** The block keeps a journal readable, not small. A
+real journal reached 108 KB and an editor panel refused to preview it ("too large
+to preview automatically"); agents could no longer read it whole either.
+
+**Fix:** `scripts/rotate-journal.sh` keeps the newest entries that fit a byte
+budget (60 KB by default, at least 5 entries) and moves older ones, verbatim and
+whole, into `<project>/journal/YYYY-MM.md`, grouped by each entry's own heading
+date, newest first. It checks that every entry line is conserved before writing,
+and `check-current-state.sh` counts decisions in the month files too, so rotation
+never makes a marker stale. Audit greps must then include the month files:
+`--include=JOURNAL.md --include='20??-??.md'`.
+
+Rejected: a calendar-month cutoff (one project put 111 KB into a single month)
+and a single `JOURNAL-archive.md` (it outgrows the limit the same way). Don't
+rotate while another session is writing the same journal.
+
 ---
 
 ## 13. Renaming a project on archive breaks `project:` frontmatter

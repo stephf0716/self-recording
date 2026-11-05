@@ -390,6 +390,198 @@ test_upgrade_refuses_without_history_or_from_tools() {
   [ "$status" -ne 0 ] || fail "upgrade.sh copied into _tools must refuse to run"
 }
 
+# ---- journal rollover -----------------------------------------------------
+
+# Entry lines (from the first dated heading on) of each file, in order.
+entries_of() {
+  for f in "$@"; do
+    awk '/^[[:space:]]*```/ { f = !f } !f && /^## [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/ { on = 1 } on' "$f"
+  done
+}
+
+# write_entry DATE TYPE -- one ~400-byte journal entry.
+write_entry() {
+  printf '## %s — Entry from %s\n\n- **type:** %s\n- **confidence:** probable\n- **source:** session\n- **status:** active\n\n' "$1" "$1" "$2"
+  i=0; while [ $i -lt 5 ]; do printf 'Body line %s for %s, long enough to give the entry real weight.\n' "$i" "$1"; i=$((i + 1)); done
+  printf '\n'
+}
+
+# A project journal with 12 entries, newest first, across 2026-09..2026-07.
+make_rollover_vault() {
+  vault="$1"
+  mkdir -p "$vault/_tools" "$vault/Project"
+  cp "$SKILL_DIR/scripts/rotate-journal.sh" "$SKILL_DIR/scripts/check-current-state.sh" "$vault/_tools/"
+  {
+    printf -- '---\ntype: journal\nproject: Project\n---\n\n# Project — journal\n\nPreamble.\n\n'
+    printf '## Current state\n\n<!-- current-state: 2026-09-30; decisions: 6 -->\n\n- *(pointer)*\n\n---\n\n'
+    for d in 2026-09-30 2026-09-20 2026-09-10 2026-09-01 2026-08-25 2026-08-15 \
+             2026-08-05 2026-08-01 2026-07-28 2026-07-14 2026-07-02 2026-07-01; do
+      case "$d" in 2026-09-20|2026-08-15|2026-08-01|2026-07-28|2026-07-14|2026-07-01) t=decision ;; *) t=fact ;; esac
+      write_entry "$d" "$t"
+    done
+  } > "$vault/Project/JOURNAL.md"
+}
+
+test_rotate_dry_run_writes_nothing() {
+  vault="$TMP_ROOT/rotate-dry"
+  make_rollover_vault "$vault"
+  before="$(cksum < "$vault/Project/JOURNAL.md")"
+  out="$(bash "$vault/_tools/rotate-journal.sh" --max-kb 2 --min-keep 2)"
+  assert_contains "$out" "ROTATE   Project" "dry run reports the rotation"
+  assert_contains "$out" "dry run" "dry run says so"
+  [ "$(cksum < "$vault/Project/JOURNAL.md")" = "$before" ] || fail "dry run must not change JOURNAL.md"
+  [ ! -e "$vault/Project/journal" ] || fail "dry run must not create journal/"
+}
+
+test_rotate_conserves_entries_and_order() {
+  vault="$TMP_ROOT/rotate-apply"
+  make_rollover_vault "$vault"
+  j="$vault/Project/JOURNAL.md"
+  original="$(entries_of "$j")"
+  check_before="$(bash "$vault/_tools/check-current-state.sh")" || fail "fixture should be OK before rotation: $check_before"
+
+  bash "$vault/_tools/rotate-journal.sh" --apply --max-kb 2 --min-keep 2 >/dev/null || fail "rotate --apply failed"
+  [ "$(wc -c < "$j")" -le 2048 ] || fail "JOURNAL.md should fit --max-kb 2"
+  kept="$(grep -c '^## 2026-' "$j")"
+  [ "$kept" -ge 2 ] || fail "min-keep 2 must be honored; kept $kept"
+  [ -f "$vault/Project/journal/2026-07.md" ] || fail "July entries should roll into journal/2026-07.md"
+
+  # Newest-first across JOURNAL.md then month files, newest month first.
+  rolled="$(entries_of "$j" $(ls "$vault/Project/journal/"*.md | sort -r))"
+  [ "$rolled" = "$original" ] || fail "rotation must conserve every entry line, in order"
+
+  assert_contains "$(head -12 "$vault/Project/journal/2026-07.md")" "type: journal-archive" "month file frontmatter"
+  assert_contains "$(head -12 "$vault/Project/journal/2026-07.md")" "period: 2026-07" "month file period"
+  [ "$(grep -c '](journal/)' "$j")" -eq 1 ] || fail "pointer line inserted exactly once"
+  awk '/\]\(journal\/\)/ { p = NR } /^## Current state/ { c = NR } END { exit !(p && c && p < c) }' "$j" \
+    || fail "pointer must sit above ## Current state"
+  grep -q '^type: journal$' "$j" || fail "JOURNAL.md frontmatter must be kept"
+
+  check_after="$(bash "$vault/_tools/check-current-state.sh")" || fail "checker must stay OK after rotation: $check_after"
+  assert_contains "$check_after" "OK       Project" "decision count unchanged after rotation"
+
+  snapshot="$(cat "$j" "$vault/Project/journal/"*.md | cksum)"
+  out="$(bash "$vault/_tools/rotate-journal.sh" --apply --max-kb 2 --min-keep 2)"
+  assert_contains "$out" "OK       Project" "second run reports OK"
+  [ "$(cat "$j" "$vault/Project/journal/"*.md | cksum)" = "$snapshot" ] || fail "second run must be a no-op"
+}
+
+test_rotate_inserts_above_existing_month_entries() {
+  vault="$TMP_ROOT/rotate-existing"
+  make_rollover_vault "$vault"
+  j="$vault/Project/JOURNAL.md"
+  bash "$vault/_tools/rotate-journal.sh" --apply --max-kb 3 --min-keep 2 >/dev/null || fail "first rotation failed"
+  first_aug="$(entries_of "$vault/Project/journal/2026-08.md" 2>/dev/null || true)"
+  # Hand-edit the month file preamble; it must survive the next insertion.
+  if [ -f "$vault/Project/journal/2026-08.md" ]; then
+    awk 'NR == 2 { print "note: kept" } { print }' "$vault/Project/journal/2026-08.md" > "$TMP_ROOT/m" &&
+      mv "$TMP_ROOT/m" "$vault/Project/journal/2026-08.md"
+  fi
+  original="$(entries_of "$j" $(ls "$vault/Project/journal/"*.md | sort -r))"
+
+  bash "$vault/_tools/rotate-journal.sh" --apply --max-kb 1 --min-keep 1 >/dev/null || fail "second rotation failed"
+  aug="$vault/Project/journal/2026-08.md"
+  [ -f "$aug" ] || fail "August month file should exist"
+  grep -q '^note: kept$' "$aug" || fail "existing month-file preamble must be kept"
+  if [ -n "$first_aug" ]; then
+    case "$(entries_of "$aug")" in
+      *"$first_aug") ;;
+      *) fail "existing month entries must stay below the newly moved ones" ;;
+    esac
+  fi
+  first_heading="$(grep -m1 '^## 2026-' "$aug")"
+  case "$first_heading" in "## 2026-08-25"*) ;; *) fail "newest August entry should be first; got $first_heading" ;; esac
+  rolled="$(entries_of "$j" $(ls "$vault/Project/journal/"*.md | sort -r))"
+  [ "$rolled" = "$original" ] || fail "second rotation must conserve entries and order"
+  [ "$(grep -c '](journal/)' "$j")" -eq 1 ] || fail "pointer must not be duplicated"
+  bash "$vault/_tools/check-current-state.sh" >/dev/null || fail "checker must stay OK after second rotation"
+}
+
+test_rotate_keeps_fenced_headings_inside_an_entry() {
+  vault="$TMP_ROOT/rotate-fence"
+  mkdir -p "$vault/_tools" "$vault/Project"
+  cp "$SKILL_DIR/scripts/rotate-journal.sh" "$vault/_tools/"
+  {
+    printf '## Current state\n\n<!-- current-state: 2026-09-02; decisions: 0 -->\n\n---\n\n'
+    write_entry 2026-09-02 fact
+    printf '## 2026-08-02 — Has an example\n\n- **type:** fact\n\n```markdown\n## 2026-01-01 — Not an entry\n```\n\nAfter the fence.\n\n'
+    write_entry 2026-08-01 fact
+  } > "$vault/Project/JOURNAL.md"
+  bash "$vault/_tools/rotate-journal.sh" --apply --max-kb 0 --min-keep 1 >/dev/null || fail "fenced rotation failed"
+  [ ! -e "$vault/Project/journal/2026-01.md" ] || fail "a fenced heading must not become its own entry"
+  grep -q 'Not an entry' "$vault/Project/journal/2026-08.md" || fail "fenced example must travel with its entry"
+  grep -q 'After the fence' "$vault/Project/journal/2026-08.md" || fail "text after the fence stays with its entry"
+}
+
+test_rotate_handles_journal_without_preamble() {
+  vault="$TMP_ROOT/rotate-nopreamble"
+  mkdir -p "$vault/_tools" "$vault/Project"
+  cp "$SKILL_DIR/scripts/rotate-journal.sh" "$vault/_tools/"
+  { write_entry 2026-09-02 fact; write_entry 2026-08-02 fact; write_entry 2026-07-02 fact; } > "$vault/Project/JOURNAL.md"
+  original="$(entries_of "$vault/Project/JOURNAL.md")"
+  bash "$vault/_tools/rotate-journal.sh" --apply --max-kb 1 --min-keep 1 >/dev/null \
+    || fail "journal starting with an entry should rotate"
+  rolled="$(entries_of "$vault/Project/JOURNAL.md" $(ls "$vault/Project/journal/"*.md | sort -r))"
+  [ "$rolled" = "$original" ] || fail "no-preamble rotation must conserve entries"
+  grep -q '](journal/)' "$vault/Project/JOURNAL.md" || fail "pointer added to an empty preamble"
+
+  # --min-keep 0 may roll everything out.
+  bash "$vault/_tools/rotate-journal.sh" --apply --max-kb 0 --min-keep 0 >/dev/null || fail "--min-keep 0 should work"
+  [ -z "$(entries_of "$vault/Project/JOURNAL.md")" ] || fail "--max-kb 0 --min-keep 0 should move every entry"
+  rolled="$(entries_of $(ls "$vault/Project/journal/"*.md | sort -r))"
+  [ "$rolled" = "$original" ] || fail "moving every entry must conserve them"
+}
+
+test_rotate_pointer_detection_reads_only_the_preamble() {
+  vault="$TMP_ROOT/rotate-quoted-pointer"
+  mkdir -p "$vault/_tools" "$vault/Project"
+  cp "$SKILL_DIR/scripts/rotate-journal.sh" "$vault/_tools/"
+  {
+    printf '## Current state\n\n<!-- current-state: 2026-09-02; decisions: 0 -->\n\n---\n\n'
+    write_entry 2026-09-02 fact
+    printf '## 2026-08-03 — Quotes the link\n\n- **type:** fact\n\nSee [`journal/`](journal/) once it exists.\n\n'
+    write_entry 2026-08-01 fact
+  } > "$vault/Project/JOURNAL.md"
+  bash "$vault/_tools/rotate-journal.sh" --apply --max-kb 1 --min-keep 1 >/dev/null || fail "rotation failed"
+  sed -n '1,/^## Current state/p' "$vault/Project/JOURNAL.md" | grep -qF 'Older entries are in' \
+    || fail "an entry quoting the link must not suppress the preamble pointer"
+}
+
+test_rotate_rejects_bad_options_and_ignores_infrastructure() {
+  vault="$TMP_ROOT/rotate-opts"
+  make_rollover_vault "$vault"
+  set +e
+  bash "$vault/_tools/rotate-journal.sh" --max-kb >/dev/null 2>&1; s1=$?
+  bash "$vault/_tools/rotate-journal.sh" --min-keep x >/dev/null 2>&1; s2=$?
+  set -e
+  [ "$s1" -eq 2 ] && [ "$s2" -eq 2 ] || fail "missing or non-numeric option values must be refused ($s1, $s2)"
+
+  mkdir -p "$vault/_agent/Scratch"
+  cp "$vault/Project/JOURNAL.md" "$vault/_agent/Scratch/JOURNAL.md"
+  out="$(bash "$vault/_tools/rotate-journal.sh" --max-kb 2 --min-keep 2)"
+  case "$out" in *_agent*) fail "underscore folders are not projects: $out" ;; esac
+  bash "$vault/_tools/rotate-journal.sh" --apply --max-kb 2 --min-keep 2 >/dev/null || fail "apply failed"
+  out="$(bash "$vault/_tools/check-current-state.sh")"
+  case "$out" in *journal*) fail "journal/ month files must not be reported as projects: $out" ;; esac
+  out="$(bash "$vault/_tools/rotate-journal.sh" Project/JOURNAL.md)"
+  assert_contains "$out" "OK       Project" "explicit JOURNAL.md path accepted"
+}
+
+test_current_state_counts_decisions_in_rolled_files() {
+  vault="$TMP_ROOT/rolled-count"
+  mkdir -p "$vault/_tools" "$vault/Project/journal"
+  cp "$SKILL_DIR/scripts/check-current-state.sh" "$vault/_tools/"
+  printf '## Current state\n<!-- current-state: 2026-09-20; decisions: 3 -->\n---\n## 2026-09-20 — New\n- **type:** decision\n' \
+    > "$vault/Project/JOURNAL.md"
+  # An unclosed fence in one month file must not hide the next file's entries
+  # (state resets per file), and a frontmatter `type:` must not count.
+  printf -- '---\ntype: journal-archive\n---\n## 2026-07-01 — Older\n- **type:** decision\n```\n' \
+    > "$vault/Project/journal/2026-07.md"
+  printf '## 2026-08-01 — Old\n- **type:** decision\n' > "$vault/Project/journal/2026-08.md"
+  out="$(bash "$vault/_tools/check-current-state.sh")" || fail "decisions in journal/*.md must count: $out"
+  assert_contains "$out" "OK       Project" "rolled decision counted"
+}
+
 test_current_state_handles_project_names_with_spaces
 printf 'PASS: project names with spaces\n'
 test_current_state_accepts_a_journal_path
@@ -404,6 +596,22 @@ test_counted_marker_is_ok_after_regeneration
 printf 'PASS: regenerated counted marker\n'
 test_legacy_marker_detects_later_decision
 printf 'PASS: legacy marker compatibility\n'
+test_current_state_counts_decisions_in_rolled_files
+printf 'PASS: decisions in journal/*.md are counted\n'
+test_rotate_dry_run_writes_nothing
+printf 'PASS: rotate dry run writes nothing\n'
+test_rotate_conserves_entries_and_order
+printf 'PASS: rotate conserves entries and order; second run is a no-op\n'
+test_rotate_inserts_above_existing_month_entries
+printf 'PASS: rotate inserts above existing month entries\n'
+test_rotate_keeps_fenced_headings_inside_an_entry
+printf 'PASS: rotate keeps fenced headings inside an entry\n'
+test_rotate_handles_journal_without_preamble
+printf 'PASS: rotate handles a journal with no preamble, and --min-keep 0\n'
+test_rotate_pointer_detection_reads_only_the_preamble
+printf 'PASS: rotate pointer detection reads only the preamble\n'
+test_rotate_rejects_bad_options_and_ignores_infrastructure
+printf 'PASS: rotate validates options and skips non-projects\n'
 test_archive_project_preserves_name_and_content
 printf 'PASS: archive preserves project identity\n'
 test_all_shell_scripts_parse

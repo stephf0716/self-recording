@@ -102,6 +102,35 @@ to comparing the newest `decision` date. It reports `MISSING` when there is no
 block. A `STALE` result is a warning to regenerate, not a data problem — the
 entries are still authoritative.
 
+### Keeping journals small: `journal/` rollover
+
+A pointer summary keeps a journal *readable*; it does not keep it *small*. Past
+~100 KB some editors refuse to preview a journal and agents cannot read it whole.
+So older entries roll out, **verbatim**, into one file per month:
+
+```
+<project>/JOURNAL.md          preamble + ## Current state + newest entries
+<project>/journal/YYYY-MM.md  older entries from that month, newest first
+```
+
+```bash
+bash _tools/rotate-journal.sh            # dry run, all projects
+bash _tools/rotate-journal.sh --apply    # keep each JOURNAL.md under 60 KB
+```
+
+- **Run it when a journal passes ~60 KB**, or whenever the dry run says `ROTATE`.
+  It moves whole entries only, never edits one, and checks every entry line is
+  conserved before writing. It adds one pointer line above `## Current state`.
+  Don't run it while another session is writing the same journal.
+- **New entries still go at the top of `JOURNAL.md`.** Never write a new entry
+  into `journal/`.
+- **Rolled entries are still memory.** Search them with grep. Mark a superseded
+  one in place there, the same as in `JOURNAL.md`. Current-state pointers stay
+  valid because they cite date + title, not the file.
+- `check-current-state.sh` counts decisions across `JOURNAL.md` and
+  `journal/*.md`, so rotation never makes a marker stale.
+- A `journal/` file is not a project: only a file named exactly `JOURNAL.md` is.
+
 ## What is worth an entry
 
 Write one when: a decision gets made; a plan changes; something turns out to be

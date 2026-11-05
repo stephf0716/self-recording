@@ -1,7 +1,7 @@
 ---
 name: self-recording
 description: Set up a Markdown folder as durable, portable AI memory that records itself while you work — project journals, provenance metadata, git-backed undo, and auto-commit hooks. Use when someone wants their notes or project folder to become memory an AI reads and writes across sessions and clients, wants to stop re-explaining context to every new chat, wants AI-written notes kept distinguishable from their own, or asks to replicate an "Obsidian as AI memory" / "AGENTS.md vault" setup. Also use to audit, repair, or upgrade an existing one.
-version: 0.4.0
+version: 0.5.0
 license: MIT
 ---
 
@@ -124,6 +124,10 @@ someone else's project names teaches an agent nothing.
   Regenerate after adding a `decision`; `scripts/check-current-state.sh` reports
   `STALE` when a session forgot. Without this, journals outgrow the context window
   and agents miss standing decisions.
+- **Journals stay small by rolling over, not by trimming.** Once a journal passes
+  ~60 KB, `scripts/rotate-journal.sh` moves its oldest entries, verbatim and
+  whole, into `<project>/journal/YYYY-MM.md`. New entries still go at the top of
+  `JOURNAL.md`. Offer it; don't install it until a journal actually needs it.
 - **Record what was rejected**, not just what was decided. A decision without its
   discarded alternatives is unreviewable a year later.
 - Any folder that must not be bulk-read (imported archives, OCR dumps, anything
@@ -229,7 +233,7 @@ Then check, without having asked for any of it:
 
 ```bash
 head -30 <project>/JOURNAL.md
-grep -rn "confidence:" --include=JOURNAL.md .
+grep -rn "confidence:" --include=JOURNAL.md --include='20??-??.md' .
 ```
 
 Four things to confirm:
@@ -281,13 +285,13 @@ They bought frictionlessness with accumulated noise. That's usually the right tr
 - `reference/pitfalls.md` — traps that cost real debugging: cloud sync vs `.git`,
   line-ending churn, silent hook failure, `SessionEnd` not firing, sandboxed clients
   that can't commit, Full Disk Access for launchd, stale contract files, journals
-  outgrowing context, upgrading over an adapted contract
+  outgrowing context and size limits, upgrading over an adapted contract
 - `templates/` — `AGENTS.md`, `CLAUDE.md`, `HERMES.md` (→ `.hermes.md`),
   `MEMORY-SCHEMA.md`, `JOURNAL.md`, `_archive/README.md`
 - `scripts/` — `setup-history.sh`, `install-hooks.sh`, `hook-autocommit.sh`,
   `install-autocommit-agent.sh` + `launchd/`, `check-current-state.sh`,
-  `new-project.sh`, `archive-project.sh`, `vgit` (vault tools); `upgrade.sh`
-  (runs from the skill)
+  `rotate-journal.sh`, `new-project.sh`, `archive-project.sh`, `vgit` (vault
+  tools); `upgrade.sh` (runs from the skill)
 
 ## Adapting, not copying
 

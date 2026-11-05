@@ -10,6 +10,9 @@
 #   STALE    -- decision count changed, or a legacy marker predates a decision
 #   OK       -- marker present and no newer/unaccounted decision
 #
+# Decisions are counted across JOURNAL.md and any journal/*.md month files that
+# rotate-journal.sh rolled older entries into.
+#
 # Read-only. Exit 1 if anything is MISSING or STALE, so it can gate a hook or a
 # CI step. A STALE result is a warning to regenerate, not a data problem -- the
 # dated entries are still authoritative.
@@ -50,7 +53,15 @@ check_journal() {
   # Extract only real decision-entry metadata: it must appear after a dated entry
   # heading, at the start of a list item, and outside fenced code. This avoids
   # counting quoted examples such as `- **type:** decision` in prose or templates.
+  # Entries rolled out by rotate-journal.sh into journal/*.md still count, so
+  # rotation never makes a counted marker stale. State resets per file.
+  jdir="$(dirname "$j")/journal"
+  set -- "$j"
+  if [ -d "$jdir" ]; then
+    for f in "$jdir"/*.md; do [ -f "$f" ] && set -- "$@" "$f"; done
+  fi
   decision_dates="$(awk '
+    FNR == 1           { fenced = 0; d = "" }
     /^[[:space:]]*```/ { fenced = !fenced; next }
     fenced             { next }
     /^## [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/ {
@@ -62,7 +73,7 @@ check_journal() {
       print d
       counted = 1
     }
-  ' "$j")"
+  ' "$@")"
   decision_count="$(printf '%s\n' "$decision_dates" | awk 'NF { n++ } END { print n + 0 }')"
   newest_decision="$(printf '%s\n' "$decision_dates" | sort | tail -1)"
 
