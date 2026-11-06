@@ -95,4 +95,14 @@ rotation is enabled: the "Keeping journals small: `journal/` rollover" section o
 `--include='20??-??.md'`.
 
 **Journals:** untouched until the owner runs `--apply`. Rotation moves whole
-entries only and adds one pointer line above `## Current state`.
+entries only and adds one pointer line above `## Current state`. Run it only
+when no other session is working in the vault, with the journals closed in
+editors.
+
+**A vault that ran an earlier copy of `rotate-journal.sh`** (ai-ws did, before
+0.5.0) may have half-applied rotations: month files written while every moved
+entry is still in `JOURNAL.md`. With nothing else writing, the 0.5.0 dry run
+lists them as `REPAIR` ("drop N already in journal/"); `--apply` removes the
+copies from `JOURNAL.md`. `CONFLICT` means a copy was edited after it rolled:
+keep the newer text by hand first. Until repaired, `check-current-state.sh`
+counts those decisions twice and reports `STALE`.

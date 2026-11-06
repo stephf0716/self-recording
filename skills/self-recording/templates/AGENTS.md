@@ -119,9 +119,19 @@ bash _tools/rotate-journal.sh --apply    # keep each JOURNAL.md under 60 KB
 ```
 
 - **Run it when a journal passes ~60 KB**, or whenever the dry run says `ROTATE`.
-  It moves whole entries only, never edits one, and checks every entry line is
-  conserved before writing. It adds one pointer line above `## Current state`.
-  Don't run it while another session is writing the same journal.
+  It moves whole entries only, never edits one, and checks every entry is
+  conserved before and after writing. It adds one pointer line above
+  `## Current state`.
+- **Only when nothing else is writing.** Close the journal in editors and make
+  sure no other session is working in the project. The script takes a lock
+  (`<project>/.rotate-journal.lock/`) and aborts if a file changes under it,
+  but it cannot stop an editor from later saving an old copy over its work.
+- **`REPAIR`** in the dry run means entries in `JOURNAL.md` are already,
+  verbatim, in `journal/` (a rotation was undone or half-applied); `--apply`
+  drops the copies from `JOURNAL.md`. **`CONFLICT`** means a copy differs from
+  its rolled version: nothing is written; keep the newer text by hand.
+  **`LOCKED`** means another rotation is running, or one was interrupted —
+  read the lock's `README` before removing it.
 - **New entries still go at the top of `JOURNAL.md`.** Never write a new entry
   into `journal/`.
 - **Rolled entries are still memory.** Search them with grep. Mark a superseded

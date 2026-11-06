@@ -60,9 +60,25 @@ check_journal() {
   if [ -d "$jdir" ]; then
     for f in "$jdir"/*.md; do [ -f "$f" ] && set -- "$@" "$f"; done
   fi
+  # Fences follow Markdown: ``` or ~~~ (3+), closed only by the same character
+  # at least as long with nothing after it -- same rule as rotate-journal.sh.
   decision_dates="$(awk '
+    function fence(line,   s, c, n, rest) {
+      s = line; sub(/^[[:space:]]*/, "", s)
+      c = substr(s, 1, 1)
+      if (c != "`" && c != "~") return 0
+      n = 0; while (substr(s, n + 1, 1) == c) n++
+      if (n < 3) return 0
+      rest = substr(s, n + 1)
+      if (!fenced) {
+        if (c == "`" && index(rest, "`")) return 0
+        fenced = 1; fch = c; flen = n; return 1
+      }
+      if (c == fch && n >= flen && rest ~ /^[[:space:]]*$/) { fenced = 0; return 1 }
+      return 0
+    }
     FNR == 1           { fenced = 0; d = "" }
-    /^[[:space:]]*```/ { fenced = !fenced; next }
+    fence($0)          { next }
     fenced             { next }
     /^## [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/ {
       d = substr($2, 1, 10)

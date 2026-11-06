@@ -128,6 +128,8 @@ someone else's project names teaches an agent nothing.
   ~60 KB, `scripts/rotate-journal.sh` moves its oldest entries, verbatim and
   whole, into `<project>/journal/YYYY-MM.md`. New entries still go at the top of
   `JOURNAL.md`. Offer it; don't install it until a journal actually needs it.
+  Run it only when no other session is writing (it locks, and aborts if a file
+  changes mid-run, but cannot stop an editor saving an old copy afterwards).
 - **Record what was rejected**, not just what was decided. A decision without its
   discarded alternatives is unreviewable a year later.
 - Any folder that must not be bulk-read (imported archives, OCR dumps, anything
