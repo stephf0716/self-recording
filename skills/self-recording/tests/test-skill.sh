@@ -390,6 +390,369 @@ test_upgrade_refuses_without_history_or_from_tools() {
   [ "$status" -ne 0 ] || fail "upgrade.sh copied into _tools must refuse to run"
 }
 
+# ---- journal rollover -----------------------------------------------------
+
+# Entry lines (from the first dated heading on) of each file, in order. Same
+# fence rule as the scripts: a longer fence can quote a shorter one.
+entries_of() {
+  for f in "$@"; do
+    awk '
+      function fence(line,   s, c, n, rest) {
+        s = line; sub(/^[[:space:]]*/, "", s); c = substr(s, 1, 1)
+        if (c != "`" && c != "~") return 0
+        n = 0; while (substr(s, n + 1, 1) == c) n++
+        if (n < 3) return 0
+        rest = substr(s, n + 1)
+        if (!fenced) { if (c == "`" && index(rest, "`")) return 0; fenced = 1; fch = c; flen = n; return 1 }
+        if (c == fch && n >= flen && rest ~ /^[[:space:]]*$/) { fenced = 0; return 1 }
+        return 0
+      }
+      { fence($0) } !fenced && /^## [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/ { on = 1 } on' "$f"
+  done
+}
+
+# write_entry DATE TYPE -- one ~400-byte journal entry.
+write_entry() {
+  printf '## %s — Entry from %s\n\n- **type:** %s\n- **confidence:** probable\n- **source:** session\n- **status:** active\n\n' "$1" "$1" "$2"
+  i=0; while [ $i -lt 5 ]; do printf 'Body line %s for %s, long enough to give the entry real weight.\n' "$i" "$1"; i=$((i + 1)); done
+  printf '\n'
+}
+
+# A project journal with 12 entries, newest first, across 2026-09..2026-07.
+make_rollover_vault() {
+  vault="$1"
+  mkdir -p "$vault/_tools" "$vault/Project"
+  cp "$SKILL_DIR/scripts/rotate-journal.sh" "$SKILL_DIR/scripts/check-current-state.sh" "$vault/_tools/"
+  {
+    printf -- '---\ntype: journal\nproject: Project\n---\n\n# Project — journal\n\nPreamble.\n\n'
+    printf '## Current state\n\n<!-- current-state: 2026-09-30; decisions: 6 -->\n\n- *(pointer)*\n\n---\n\n'
+    for d in 2026-09-30 2026-09-20 2026-09-10 2026-09-01 2026-08-25 2026-08-15 \
+             2026-08-05 2026-08-01 2026-07-28 2026-07-14 2026-07-02 2026-07-01; do
+      case "$d" in 2026-09-20|2026-08-15|2026-08-01|2026-07-28|2026-07-14|2026-07-01) t=decision ;; *) t=fact ;; esac
+      write_entry "$d" "$t"
+    done
+  } > "$vault/Project/JOURNAL.md"
+}
+
+test_rotate_dry_run_writes_nothing() {
+  vault="$TMP_ROOT/rotate-dry"
+  make_rollover_vault "$vault"
+  before="$(cksum < "$vault/Project/JOURNAL.md")"
+  out="$(bash "$vault/_tools/rotate-journal.sh" --max-kb 2 --min-keep 2)"
+  assert_contains "$out" "ROTATE   Project" "dry run reports the rotation"
+  assert_contains "$out" "dry run" "dry run says so"
+  [ "$(cksum < "$vault/Project/JOURNAL.md")" = "$before" ] || fail "dry run must not change JOURNAL.md"
+  [ ! -e "$vault/Project/journal" ] || fail "dry run must not create journal/"
+}
+
+test_rotate_conserves_entries_and_order() {
+  vault="$TMP_ROOT/rotate-apply"
+  make_rollover_vault "$vault"
+  j="$vault/Project/JOURNAL.md"
+  original="$(entries_of "$j")"
+  check_before="$(bash "$vault/_tools/check-current-state.sh")" || fail "fixture should be OK before rotation: $check_before"
+
+  bash "$vault/_tools/rotate-journal.sh" --apply --max-kb 2 --min-keep 2 >/dev/null || fail "rotate --apply failed"
+  [ "$(wc -c < "$j")" -le 2048 ] || fail "JOURNAL.md should fit --max-kb 2"
+  kept="$(grep -c '^## 2026-' "$j")"
+  [ "$kept" -ge 2 ] || fail "min-keep 2 must be honored; kept $kept"
+  [ -f "$vault/Project/journal/2026-07.md" ] || fail "July entries should roll into journal/2026-07.md"
+
+  # Newest-first across JOURNAL.md then month files, newest month first.
+  rolled="$(entries_of "$j" $(ls "$vault/Project/journal/"*.md | sort -r))"
+  [ "$rolled" = "$original" ] || fail "rotation must conserve every entry line, in order"
+
+  assert_contains "$(head -12 "$vault/Project/journal/2026-07.md")" "type: journal-archive" "month file frontmatter"
+  assert_contains "$(head -12 "$vault/Project/journal/2026-07.md")" "period: 2026-07" "month file period"
+  [ "$(grep -c '](journal/)' "$j")" -eq 1 ] || fail "pointer line inserted exactly once"
+  awk '/\]\(journal\/\)/ { p = NR } /^## Current state/ { c = NR } END { exit !(p && c && p < c) }' "$j" \
+    || fail "pointer must sit above ## Current state"
+  grep -q '^type: journal$' "$j" || fail "JOURNAL.md frontmatter must be kept"
+
+  check_after="$(bash "$vault/_tools/check-current-state.sh")" || fail "checker must stay OK after rotation: $check_after"
+  assert_contains "$check_after" "OK       Project" "decision count unchanged after rotation"
+
+  snapshot="$(cat "$j" "$vault/Project/journal/"*.md | cksum)"
+  out="$(bash "$vault/_tools/rotate-journal.sh" --apply --max-kb 2 --min-keep 2)"
+  assert_contains "$out" "OK       Project" "second run reports OK"
+  [ "$(cat "$j" "$vault/Project/journal/"*.md | cksum)" = "$snapshot" ] || fail "second run must be a no-op"
+}
+
+test_rotate_inserts_above_existing_month_entries() {
+  vault="$TMP_ROOT/rotate-existing"
+  make_rollover_vault "$vault"
+  j="$vault/Project/JOURNAL.md"
+  bash "$vault/_tools/rotate-journal.sh" --apply --max-kb 3 --min-keep 2 >/dev/null || fail "first rotation failed"
+  first_aug="$(entries_of "$vault/Project/journal/2026-08.md" 2>/dev/null || true)"
+  # Hand-edit the month file preamble; it must survive the next insertion.
+  if [ -f "$vault/Project/journal/2026-08.md" ]; then
+    awk 'NR == 2 { print "note: kept" } { print }' "$vault/Project/journal/2026-08.md" > "$TMP_ROOT/m" &&
+      mv "$TMP_ROOT/m" "$vault/Project/journal/2026-08.md"
+  fi
+  original="$(entries_of "$j" $(ls "$vault/Project/journal/"*.md | sort -r))"
+
+  bash "$vault/_tools/rotate-journal.sh" --apply --max-kb 1 --min-keep 1 >/dev/null || fail "second rotation failed"
+  aug="$vault/Project/journal/2026-08.md"
+  [ -f "$aug" ] || fail "August month file should exist"
+  grep -q '^note: kept$' "$aug" || fail "existing month-file preamble must be kept"
+  if [ -n "$first_aug" ]; then
+    case "$(entries_of "$aug")" in
+      *"$first_aug") ;;
+      *) fail "existing month entries must stay below the newly moved ones" ;;
+    esac
+  fi
+  first_heading="$(grep -m1 '^## 2026-' "$aug")"
+  case "$first_heading" in "## 2026-08-25"*) ;; *) fail "newest August entry should be first; got $first_heading" ;; esac
+  rolled="$(entries_of "$j" $(ls "$vault/Project/journal/"*.md | sort -r))"
+  [ "$rolled" = "$original" ] || fail "second rotation must conserve entries and order"
+  [ "$(grep -c '](journal/)' "$j")" -eq 1 ] || fail "pointer must not be duplicated"
+  bash "$vault/_tools/check-current-state.sh" >/dev/null || fail "checker must stay OK after second rotation"
+}
+
+test_rotate_keeps_fenced_headings_inside_an_entry() {
+  vault="$TMP_ROOT/rotate-fence"
+  mkdir -p "$vault/_tools" "$vault/Project"
+  cp "$SKILL_DIR/scripts/rotate-journal.sh" "$vault/_tools/"
+  {
+    printf '## Current state\n\n<!-- current-state: 2026-09-02; decisions: 0 -->\n\n---\n\n'
+    write_entry 2026-09-02 fact
+    printf '## 2026-08-02 — Has an example\n\n- **type:** fact\n\n```markdown\n## 2026-01-01 — Not an entry\n```\n\nAfter the fence.\n\n'
+    write_entry 2026-08-01 fact
+  } > "$vault/Project/JOURNAL.md"
+  bash "$vault/_tools/rotate-journal.sh" --apply --max-kb 0 --min-keep 1 >/dev/null || fail "fenced rotation failed"
+  [ ! -e "$vault/Project/journal/2026-01.md" ] || fail "a fenced heading must not become its own entry"
+  grep -q 'Not an entry' "$vault/Project/journal/2026-08.md" || fail "fenced example must travel with its entry"
+  grep -q 'After the fence' "$vault/Project/journal/2026-08.md" || fail "text after the fence stays with its entry"
+}
+
+test_rotate_handles_journal_without_preamble() {
+  vault="$TMP_ROOT/rotate-nopreamble"
+  mkdir -p "$vault/_tools" "$vault/Project"
+  cp "$SKILL_DIR/scripts/rotate-journal.sh" "$vault/_tools/"
+  { write_entry 2026-09-02 fact; write_entry 2026-08-02 fact; write_entry 2026-07-02 fact; } > "$vault/Project/JOURNAL.md"
+  original="$(entries_of "$vault/Project/JOURNAL.md")"
+  bash "$vault/_tools/rotate-journal.sh" --apply --max-kb 1 --min-keep 1 >/dev/null \
+    || fail "journal starting with an entry should rotate"
+  rolled="$(entries_of "$vault/Project/JOURNAL.md" $(ls "$vault/Project/journal/"*.md | sort -r))"
+  [ "$rolled" = "$original" ] || fail "no-preamble rotation must conserve entries"
+  grep -q '](journal/)' "$vault/Project/JOURNAL.md" || fail "pointer added to an empty preamble"
+
+  # --min-keep 0 may roll everything out.
+  bash "$vault/_tools/rotate-journal.sh" --apply --max-kb 0 --min-keep 0 >/dev/null || fail "--min-keep 0 should work"
+  [ -z "$(entries_of "$vault/Project/JOURNAL.md")" ] || fail "--max-kb 0 --min-keep 0 should move every entry"
+  rolled="$(entries_of $(ls "$vault/Project/journal/"*.md | sort -r))"
+  [ "$rolled" = "$original" ] || fail "moving every entry must conserve them"
+}
+
+test_rotate_pointer_detection_reads_only_the_preamble() {
+  vault="$TMP_ROOT/rotate-quoted-pointer"
+  mkdir -p "$vault/_tools" "$vault/Project"
+  cp "$SKILL_DIR/scripts/rotate-journal.sh" "$vault/_tools/"
+  {
+    printf '## Current state\n\n<!-- current-state: 2026-09-02; decisions: 0 -->\n\n---\n\n'
+    write_entry 2026-09-02 fact
+    printf '## 2026-08-03 — Quotes the link\n\n- **type:** fact\n\nSee [`journal/`](journal/) once it exists.\n\n'
+    write_entry 2026-08-01 fact
+  } > "$vault/Project/JOURNAL.md"
+  bash "$vault/_tools/rotate-journal.sh" --apply --max-kb 1 --min-keep 1 >/dev/null || fail "rotation failed"
+  sed -n '1,/^## Current state/p' "$vault/Project/JOURNAL.md" | grep -qF 'Older entries are in' \
+    || fail "an entry quoting the link must not suppress the preamble pointer"
+}
+
+test_rotate_rejects_bad_options_and_ignores_infrastructure() {
+  vault="$TMP_ROOT/rotate-opts"
+  make_rollover_vault "$vault"
+  set +e
+  bash "$vault/_tools/rotate-journal.sh" --max-kb >/dev/null 2>&1; s1=$?
+  bash "$vault/_tools/rotate-journal.sh" --min-keep x >/dev/null 2>&1; s2=$?
+  set -e
+  [ "$s1" -eq 2 ] && [ "$s2" -eq 2 ] || fail "missing or non-numeric option values must be refused ($s1, $s2)"
+
+  mkdir -p "$vault/_agent/Scratch"
+  cp "$vault/Project/JOURNAL.md" "$vault/_agent/Scratch/JOURNAL.md"
+  out="$(bash "$vault/_tools/rotate-journal.sh" --max-kb 2 --min-keep 2)"
+  case "$out" in *_agent*) fail "underscore folders are not projects: $out" ;; esac
+  bash "$vault/_tools/rotate-journal.sh" --apply --max-kb 2 --min-keep 2 >/dev/null || fail "apply failed"
+  out="$(bash "$vault/_tools/check-current-state.sh")"
+  case "$out" in *journal*) fail "journal/ month files must not be reported as projects: $out" ;; esac
+  out="$(bash "$vault/_tools/rotate-journal.sh" Project/JOURNAL.md)"
+  assert_contains "$out" "OK       Project" "explicit JOURNAL.md path accepted"
+}
+
+test_rotate_honors_fence_length() {
+  vault="$TMP_ROOT/rotate-long-fence"
+  mkdir -p "$vault/_tools" "$vault/Project"
+  cp "$SKILL_DIR/scripts/rotate-journal.sh" "$SKILL_DIR/scripts/check-current-state.sh" "$vault/_tools/"
+  {
+    printf '## Current state\n\n<!-- current-state: 2026-09-02; decisions: 0 -->\n\n---\n\n'
+    write_entry 2026-09-02 fact
+    printf '## 2026-08-02 — Quotes a fenced example\n\n- **type:** fact\n\n````markdown\n```\n## 2026-01-01 — Not an entry\n- **type:** decision\n```\n````\n\n~~~\n## 2026-02-01 — Not one either\n```\n~~~\n\nAfter both fences.\n\n'
+    write_entry 2026-08-01 fact
+  } > "$vault/Project/JOURNAL.md"
+  original="$(entries_of "$vault/Project/JOURNAL.md")"
+  bash "$vault/_tools/check-current-state.sh" >/dev/null || fail "a decision inside a long fence must not count"
+  bash "$vault/_tools/rotate-journal.sh" --apply --max-kb 0 --min-keep 1 >/dev/null || fail "long-fence rotation failed"
+  [ ! -e "$vault/Project/journal/2026-01.md" ] || fail "a heading inside a 4-backtick fence must not become an entry"
+  [ ! -e "$vault/Project/journal/2026-02.md" ] || fail "a heading inside a ~~~ fence must not become an entry"
+  grep -q 'After both fences' "$vault/Project/journal/2026-08.md" || fail "the quoting entry must stay whole"
+  rolled="$(entries_of "$vault/Project/JOURNAL.md" $(ls "$vault/Project/journal/"*.md | sort -r))"
+  [ "$rolled" = "$original" ] || fail "long-fence rotation must conserve entries and order"
+}
+
+test_rotate_refuses_unsafe_destinations_and_sources() {
+  vault="$TMP_ROOT/rotate-unsafe"
+  make_rollover_vault "$vault"
+  j="$vault/Project/JOURNAL.md"
+  before="$(cksum < "$j")"
+  # A directory where a month file should go would swallow the mv.
+  mkdir -p "$vault/Project/journal/2026-07.md"
+  set +e
+  out="$(bash "$vault/_tools/rotate-journal.sh" --apply --max-kb 2 --min-keep 2 2>&1)"; status=$?
+  set -e
+  [ "$status" -ne 0 ] || fail "a directory named like a month file must be refused"
+  assert_contains "$out" "nothing written" "refusal says nothing was written"
+  [ "$(cksum < "$j")" = "$before" ] || fail "JOURNAL.md must be untouched when a destination is a directory"
+  [ -z "$(ls -A "$vault/Project/journal/2026-07.md")" ] || fail "nothing may be written inside the directory"
+  rmdir "$vault/Project/journal/2026-07.md"
+
+  # An unreadable month file must abort, not be overwritten. Skipped where
+  # chmod cannot revoke read access (Windows, root).
+  printf '## 2026-07-01 — Already rolled\n- **type:** fact\n' > "$vault/Project/journal/2026-07.md"
+  chmod 000 "$vault/Project/journal/2026-07.md"
+  if [ ! -r "$vault/Project/journal/2026-07.md" ]; then
+    set +e
+    bash "$vault/_tools/rotate-journal.sh" --apply --max-kb 2 --min-keep 2 >/dev/null 2>&1; status=$?
+    set -e
+    chmod 644 "$vault/Project/journal/2026-07.md"
+    [ "$status" -ne 0 ] || fail "an unreadable month file must abort the rotation"
+    [ "$(cksum < "$j")" = "$before" ] || fail "JOURNAL.md must be untouched when a source is unreadable"
+    grep -q 'Already rolled' "$vault/Project/journal/2026-07.md" || fail "unreadable month file must not be overwritten"
+  else
+    chmod 644 "$vault/Project/journal/2026-07.md"
+    printf '  (unreadable-file case skipped: chmod cannot revoke read here)\n'
+  fi
+}
+
+test_rotate_reads_zero_padded_values_as_decimal() {
+  vault="$TMP_ROOT/rotate-decimal"
+  make_rollover_vault "$vault"
+  a="$(bash "$vault/_tools/rotate-journal.sh" --max-kb 3 --min-keep 2)"
+  b="$(bash "$vault/_tools/rotate-journal.sh" --max-kb 003 --min-keep 02)"
+  [ "$a" = "$b" ] || fail "--max-kb 003 must mean 3, not octal: $b"
+  bash "$vault/_tools/rotate-journal.sh" --max-kb 08 --min-keep 09 >/dev/null || fail "08 and 09 are valid decimal values"
+}
+
+test_rotate_aborts_on_concurrent_write() {
+  vault="$TMP_ROOT/rotate-concurrent"
+  make_rollover_vault "$vault"
+  j="$vault/Project/JOURNAL.md"
+  # Another session appends between the read and the replace.
+  set +e
+  out="$(ROTATE_JOURNAL_TEST_HOOK='printf "\n## 2026-10-01 — Late append\n" >> Project/JOURNAL.md' \
+    bash "$vault/_tools/rotate-journal.sh" --apply --max-kb 2 --min-keep 2 2>&1)"; status=$?
+  set -e
+  [ "$status" -ne 0 ] || fail "a write during rotation must abort it"
+  assert_contains "$out" "changed while rotating" "says why it aborted"
+  grep -q 'Late append' "$j" || fail "the concurrent append must survive"
+  [ ! -e "$vault/Project/journal" ] || fail "nothing may be written when a source changed"
+  [ ! -e "$vault/Project/.rotate-journal.lock" ] || fail "lock must be released after an abort"
+}
+
+test_rotate_rolls_back_a_failed_replace() {
+  vault="$TMP_ROOT/rotate-rollback"
+  make_rollover_vault "$vault"
+  j="$vault/Project/JOURNAL.md"
+  before="$(cksum < "$j")"
+  for at in away:JOURNAL.md place:JOURNAL.md place:2026-07.md; do
+    set +e
+    out="$(ROTATE_JOURNAL_FAIL_AT="$at" bash "$vault/_tools/rotate-journal.sh" --apply --max-kb 2 --min-keep 2 2>&1)"; status=$?
+    set -e
+    [ "$status" -ne 0 ] || fail "a failed replace ($at) must exit non-zero"
+    assert_contains "$out" "rolled back" "a failed replace ($at) is rolled back"
+    [ "$(cksum < "$j")" = "$before" ] || fail "JOURNAL.md must be restored after a failed $at"
+    [ ! -e "$vault/Project/journal" ] || fail "new month files must be removed after a failed $at"
+    [ ! -e "$vault/Project/.rotate-journal.lock" ] || fail "lock must be released after rollback ($at)"
+  done
+
+  # With month files already present, a failure restores them byte for byte.
+  bash "$vault/_tools/rotate-journal.sh" --apply --max-kb 3 --min-keep 2 >/dev/null || fail "setup rotation failed"
+  snap="$(cat "$j" "$vault/Project/journal/"*.md | cksum)"
+  set +e
+  ROTATE_JOURNAL_FAIL_AT=place:2026-08.md bash "$vault/_tools/rotate-journal.sh" --apply --max-kb 1 --min-keep 1 >/dev/null 2>&1; status=$?
+  set -e
+  [ "$status" -ne 0 ] || fail "failed replace of an existing month file must exit non-zero"
+  [ "$(cat "$j" "$vault/Project/journal/"*.md | cksum)" = "$snap" ] || fail "existing files must be restored after rollback"
+  dups="$(entries_of "$j" "$vault/Project/journal/"*.md | grep '^## 20' | sort | uniq -d)"
+  [ -z "$dups" ] || fail "rollback must not leave duplicated entries: $dups"
+}
+
+test_rotate_repairs_a_half_applied_rotation() {
+  vault="$TMP_ROOT/rotate-repair"
+  make_rollover_vault "$vault"
+  j="$vault/Project/JOURNAL.md"
+  cp "$j" "$TMP_ROOT/repair-original"
+  bash "$vault/_tools/rotate-journal.sh" --apply --max-kb 2 --min-keep 2 >/dev/null || fail "setup rotation failed"
+  # The pre-rotation JOURNAL.md comes back (an editor or sync restore), and a
+  # session then adds a new entry at the top.
+  awk 'done || !/^## 2026-09-30/ { print; next } { printf "## 2026-10-02 — Written after the restore\n\n- **type:** fact\n\n"; print; done = 1 }' \
+    "$TMP_ROOT/repair-original" > "$j"
+  want="$( { entries_of "$j"; } | grep '^## 20' | sort -u)"
+
+  out="$(bash "$vault/_tools/rotate-journal.sh" --max-kb 2 --min-keep 2)"
+  assert_contains "$out" "already in journal/" "dry run reports the duplicates"
+  bash "$vault/_tools/rotate-journal.sh" --apply --max-kb 2 --min-keep 2 >/dev/null || fail "repair failed"
+  all="$(entries_of "$j" "$vault/Project/journal/"*.md | grep '^## 20')"
+  [ -z "$(printf '%s\n' "$all" | sort | uniq -d)" ] || fail "repair must leave no duplicated entries"
+  [ "$(printf '%s\n' "$all" | sort -u)" = "$want" ] || fail "repair must keep every entry"
+  [ "$(grep -m1 '^## 20' "$j")" = "## 2026-10-02 — Written after the restore" ] || fail "the new entry stays at the top"
+  out="$(bash "$vault/_tools/rotate-journal.sh" --max-kb 2 --min-keep 2)"
+  assert_contains "$out" "OK       Project" "after repair there is nothing left to do"
+}
+
+test_rotate_refuses_conflicts_and_held_locks() {
+  vault="$TMP_ROOT/rotate-conflict"
+  make_rollover_vault "$vault"
+  j="$vault/Project/JOURNAL.md"
+  cp "$j" "$TMP_ROOT/conflict-original"
+  bash "$vault/_tools/rotate-journal.sh" --apply --max-kb 2 --min-keep 2 >/dev/null || fail "setup rotation failed"
+  # The restored copy differs from the rolled one: same heading, edited text.
+  sed 's/^Body line 0 for 2026-07-01,/Body line 0 (edited) for 2026-07-01,/' "$TMP_ROOT/conflict-original" > "$j"
+  snap="$(cat "$j" "$vault/Project/journal/"*.md | cksum)"
+  set +e
+  out="$(bash "$vault/_tools/rotate-journal.sh" --apply --max-kb 2 --min-keep 2 2>&1)"; status=$?
+  set -e
+  [ "$status" -ne 0 ] || fail "a conflicting duplicate must be refused"
+  assert_contains "$out" "CONFLICT" "conflict is named"
+  assert_contains "$out" "2026-07-01" "conflicting entry is listed"
+  [ "$(cat "$j" "$vault/Project/journal/"*.md | cksum)" = "$snap" ] || fail "nothing may change on a conflict"
+
+  vault="$TMP_ROOT/rotate-locked"
+  make_rollover_vault "$vault"
+  mkdir "$vault/Project/.rotate-journal.lock"
+  set +e
+  out="$(bash "$vault/_tools/rotate-journal.sh" --apply --max-kb 2 --min-keep 2 2>&1)"; status=$?
+  set -e
+  [ "$status" -ne 0 ] || fail "a held lock must be refused"
+  assert_contains "$out" "LOCKED" "held lock is reported"
+  [ ! -e "$vault/Project/journal" ] || fail "nothing may be written while locked"
+  [ -d "$vault/Project/.rotate-journal.lock" ] || fail "someone else's lock must not be removed"
+}
+
+test_current_state_counts_decisions_in_rolled_files() {
+  vault="$TMP_ROOT/rolled-count"
+  mkdir -p "$vault/_tools" "$vault/Project/journal"
+  cp "$SKILL_DIR/scripts/check-current-state.sh" "$vault/_tools/"
+  printf '## Current state\n<!-- current-state: 2026-09-20; decisions: 3 -->\n---\n## 2026-09-20 — New\n- **type:** decision\n' \
+    > "$vault/Project/JOURNAL.md"
+  # An unclosed fence in one month file must not hide the next file's entries
+  # (state resets per file), and a frontmatter `type:` must not count.
+  printf -- '---\ntype: journal-archive\n---\n## 2026-07-01 — Older\n- **type:** decision\n```\n' \
+    > "$vault/Project/journal/2026-07.md"
+  printf '## 2026-08-01 — Old\n- **type:** decision\n' > "$vault/Project/journal/2026-08.md"
+  out="$(bash "$vault/_tools/check-current-state.sh")" || fail "decisions in journal/*.md must count: $out"
+  assert_contains "$out" "OK       Project" "rolled decision counted"
+}
+
 test_current_state_handles_project_names_with_spaces
 printf 'PASS: project names with spaces\n'
 test_current_state_accepts_a_journal_path
@@ -404,6 +767,36 @@ test_counted_marker_is_ok_after_regeneration
 printf 'PASS: regenerated counted marker\n'
 test_legacy_marker_detects_later_decision
 printf 'PASS: legacy marker compatibility\n'
+test_current_state_counts_decisions_in_rolled_files
+printf 'PASS: decisions in journal/*.md are counted\n'
+test_rotate_dry_run_writes_nothing
+printf 'PASS: rotate dry run writes nothing\n'
+test_rotate_conserves_entries_and_order
+printf 'PASS: rotate conserves entries and order; second run is a no-op\n'
+test_rotate_inserts_above_existing_month_entries
+printf 'PASS: rotate inserts above existing month entries\n'
+test_rotate_keeps_fenced_headings_inside_an_entry
+printf 'PASS: rotate keeps fenced headings inside an entry\n'
+test_rotate_handles_journal_without_preamble
+printf 'PASS: rotate handles a journal with no preamble, and --min-keep 0\n'
+test_rotate_pointer_detection_reads_only_the_preamble
+printf 'PASS: rotate pointer detection reads only the preamble\n'
+test_rotate_rejects_bad_options_and_ignores_infrastructure
+printf 'PASS: rotate validates options and skips non-projects\n'
+test_rotate_honors_fence_length
+printf 'PASS: rotate and checker honor fence length and ~~~ fences\n'
+test_rotate_refuses_unsafe_destinations_and_sources
+printf 'PASS: rotate refuses directory destinations and unreadable sources\n'
+test_rotate_reads_zero_padded_values_as_decimal
+printf 'PASS: rotate reads zero-padded values as decimal\n'
+test_rotate_aborts_on_concurrent_write
+printf 'PASS: rotate aborts when a source changes mid-run\n'
+test_rotate_rolls_back_a_failed_replace
+printf 'PASS: rotate rolls back a failed replace, leaving no duplicates\n'
+test_rotate_repairs_a_half_applied_rotation
+printf 'PASS: rotate repairs a half-applied rotation\n'
+test_rotate_refuses_conflicts_and_held_locks
+printf 'PASS: rotate refuses conflicting duplicates and held locks\n'
 test_archive_project_preserves_name_and_content
 printf 'PASS: archive preserves project identity\n'
 test_all_shell_scripts_parse
