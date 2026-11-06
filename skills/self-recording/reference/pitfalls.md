@@ -191,6 +191,11 @@ outside the vault and its history. `begin` copies it to `memories/.dream-backup/
 one directory per run so a same-day retry cannot overwrite the snapshot from
 before a bad rebuild, and keeps the last 7 runs; that copy is its only undo.
 
+**Related:** a journal rotation (`rotate-journal.sh --apply`, pitfall 12) is also a
+writer, and mid-rotation the journals are half-replaced. Both `begin` and `end`
+refuse, committing nothing, while a `<project>/.rotate-journal.lock/` exists; the
+job itself only runs the rotation dry run. Keep `--apply` out of the dream window.
+
 ---
 
 ## 5. Sandboxed agents can't write the places you'd expect
@@ -305,6 +310,42 @@ Two things make this hold rather than drift:
 is why `STALE` is a warning, not an error — the entries are still authoritative
 and the block can be rebuilt from them. Run the check in the session-start hook if
 drift becomes chronic.
+
+**Second failure mode: size.** The block keeps a journal readable, not small. A
+real journal reached 108 KB and an editor panel refused to preview it ("too large
+to preview automatically"); agents could no longer read it whole either.
+
+**Fix:** `scripts/rotate-journal.sh` keeps the newest entries that fit a byte
+budget (60 KB by default, at least 5 entries) and moves older ones, verbatim and
+whole, into `<project>/journal/YYYY-MM.md`, grouped by each entry's own heading
+date, newest first. It checks that every entry is conserved before and after
+writing, and `check-current-state.sh` counts decisions in the month files too, so
+rotation never makes a marker stale. Audit greps must then include the month files:
+`--include=JOURNAL.md --include='20??-??.md'`.
+
+Rejected: a calendar-month cutoff (one project put 111 KB into a single month)
+and a single `JOURNAL-archive.md` (it outgrows the limit the same way).
+
+**Rotation is a multi-file write, and journals have other writers.** The first
+live run (ai-ws, 2026-11-05) lost an entry another session appended mid-run, and
+left 7 projects with month files written but every moved entry still in
+`JOURNAL.md` — an older `JOURNAL.md` came back, probably from the editor panel
+or the sync client. So the script:
+
+- takes a per-project lock (`mkdir <project>/.rotate-journal.lock`, which is
+  also its same-volume staging area);
+- checksums every file it reads and re-checks them just before replacing
+  anything, aborting with nothing written if one changed;
+- renames each original into the lock before renaming its replacement in, so
+  any failure rolls everything back;
+- reads the result back and compares it to the plan;
+- treats an entry already in `journal/` verbatim as a duplicate to drop
+  (`REPAIR`), and a same-heading entry with different text as a `CONFLICT` to
+  resolve by hand.
+
+None of that stops an editor from saving an old buffer *after* the run. Close
+the journal and don't rotate while other sessions work; the next dry run reports
+a reverted rotation as `REPAIR`.
 
 ---
 

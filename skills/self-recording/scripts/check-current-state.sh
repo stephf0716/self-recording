@@ -10,6 +10,9 @@
 #   STALE    -- decision count changed, or a legacy marker predates a decision
 #   OK       -- marker present and no newer/unaccounted decision
 #
+# Decisions are counted across JOURNAL.md and any journal/*.md month files that
+# rotate-journal.sh rolled older entries into.
+#
 # Read-only. Exit 1 if anything is MISSING or STALE, so it can gate a hook or a
 # CI step. A STALE result is a warning to regenerate, not a data problem -- the
 # dated entries are still authoritative.
@@ -50,8 +53,32 @@ check_journal() {
   # Extract only real decision-entry metadata: it must appear after a dated entry
   # heading, at the start of a list item, and outside fenced code. This avoids
   # counting quoted examples such as `- **type:** decision` in prose or templates.
+  # Entries rolled out by rotate-journal.sh into journal/*.md still count, so
+  # rotation never makes a counted marker stale. State resets per file.
+  jdir="$(dirname "$j")/journal"
+  set -- "$j"
+  if [ -d "$jdir" ]; then
+    for f in "$jdir"/*.md; do [ -f "$f" ] && set -- "$@" "$f"; done
+  fi
+  # Fences follow Markdown: ``` or ~~~ (3+), closed only by the same character
+  # at least as long with nothing after it -- same rule as rotate-journal.sh.
   decision_dates="$(awk '
-    /^[[:space:]]*```/ { fenced = !fenced; next }
+    function fence(line,   s, c, n, rest) {
+      s = line; sub(/^[[:space:]]*/, "", s)
+      c = substr(s, 1, 1)
+      if (c != "`" && c != "~") return 0
+      n = 0; while (substr(s, n + 1, 1) == c) n++
+      if (n < 3) return 0
+      rest = substr(s, n + 1)
+      if (!fenced) {
+        if (c == "`" && index(rest, "`")) return 0
+        fenced = 1; fch = c; flen = n; return 1
+      }
+      if (c == fch && n >= flen && rest ~ /^[[:space:]]*$/) { fenced = 0; return 1 }
+      return 0
+    }
+    FNR == 1           { fenced = 0; d = "" }
+    fence($0)          { next }
     fenced             { next }
     /^## [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/ {
       d = substr($2, 1, 10)
@@ -62,7 +89,7 @@ check_journal() {
       print d
       counted = 1
     }
-  ' "$j")"
+  ' "$@")"
   decision_count="$(printf '%s\n' "$decision_dates" | awk 'NF { n++ } END { print n + 0 }')"
   newest_decision="$(printf '%s\n' "$decision_dates" | sort | tail -1)"
 

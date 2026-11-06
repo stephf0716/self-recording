@@ -21,6 +21,10 @@ that host, so it is never the only source. The job never reads another
 harness's transcripts. Every agent records into the vault itself, wherever it
 runs, and the dream synthesizes those records.
 
+Journal history includes rolled `journal/YYYY-MM.md` files, so superseded
+markers set there are seen. A rotation commit is treated as a move: its
+entries were neither deleted nor newly written.
+
 ## Why the guidance file
 
 Without it, the job only files things away: an agent learns from an entry only
@@ -78,7 +82,12 @@ them: `pitfalls.md` 4e and 15.
    its own job, staggered by an hour or more. Logs carry the host name; each
    job finds its window from its own host's logs only, and greps before
    writing, so overlaps don't duplicate.
-7. Add the "Nightly consolidation" section from `templates/AGENTS.md` to the
+7. Journal rotation (`rotate-journal.sh --apply`) needs no other writer, and
+   the dream is one. Never schedule or run `--apply` during the dream window.
+   The job itself only runs the dry run and reports journals to rotate;
+   `dream-commit.sh` stops, committing nothing, if it finds a rotation lock
+   (`<project>/.rotate-journal.lock/`), and the next run retries the window.
+8. Add the "Nightly consolidation" section from `templates/AGENTS.md` to the
    vault's contract, so live sessions know what dream entries are, plus the
    "read `_agent/GUIDANCE.md` next" paragraph near its top. In each pointer
    file, add the guidance line (`templates/CLAUDE.md` imports it with
@@ -99,7 +108,7 @@ After the first scheduled run, from the vault:
 
 ```bash
 _tools/vgit log --oneline -3     # a dream: commit, possibly after a pre-dream:
-grep -rn -B1 '\*\*source:\*\* dream' --include=JOURNAL.md . | grep 'confidence:\*\* confirmed'   # expect nothing
+grep -rn -B1 '\*\*source:\*\* dream' --include=JOURNAL.md --include='20??-??.md' . | grep 'confidence:\*\* confirmed'   # expect nothing
 head -5 _agent/GUIDANCE.md       # today's guidance marker
 ```
 

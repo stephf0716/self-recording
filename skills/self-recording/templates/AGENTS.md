@@ -107,6 +107,45 @@ to comparing the newest `decision` date. It reports `MISSING` when there is no
 block. A `STALE` result is a warning to regenerate, not a data problem — the
 entries are still authoritative.
 
+### Keeping journals small: `journal/` rollover
+
+A pointer summary keeps a journal *readable*; it does not keep it *small*. Past
+~100 KB some editors refuse to preview a journal and agents cannot read it whole.
+So older entries roll out, **verbatim**, into one file per month:
+
+```
+<project>/JOURNAL.md          preamble + ## Current state + newest entries
+<project>/journal/YYYY-MM.md  older entries from that month, newest first
+```
+
+```bash
+bash _tools/rotate-journal.sh            # dry run, all projects
+bash _tools/rotate-journal.sh --apply    # keep each JOURNAL.md under 60 KB
+```
+
+- **Run it when a journal passes ~60 KB**, or whenever the dry run says `ROTATE`.
+  It moves whole entries only, never edits one, and checks every entry is
+  conserved before and after writing. It adds one pointer line above
+  `## Current state`.
+- **Only when nothing else is writing.** Close the journal in editors and make
+  sure no other session is working in the project. The script takes a lock
+  (`<project>/.rotate-journal.lock/`) and aborts if a file changes under it,
+  but it cannot stop an editor from later saving an old copy over its work.
+- **`REPAIR`** in the dry run means entries in `JOURNAL.md` are already,
+  verbatim, in `journal/` (a rotation was undone or half-applied); `--apply`
+  drops the copies from `JOURNAL.md`. **`CONFLICT`** means a copy differs from
+  its rolled version: nothing is written; keep the newer text by hand.
+  **`LOCKED`** means another rotation is running, or one was interrupted —
+  read the lock's `README` before removing it.
+- **New entries still go at the top of `JOURNAL.md`.** Never write a new entry
+  into `journal/`.
+- **Rolled entries are still memory.** Search them with grep. Mark a superseded
+  one in place there, the same as in `JOURNAL.md`. Current-state pointers stay
+  valid because they cite date + title, not the file.
+- `check-current-state.sh` counts decisions across `JOURNAL.md` and
+  `journal/*.md`, so rotation never makes a marker stale.
+- A `journal/` file is not a project: only a file named exactly `JOURNAL.md` is.
+
 ## What is worth an entry
 
 Write one when: a decision gets made; a plan changes; something turns out to be
@@ -264,3 +303,6 @@ day's sessions, appends whatever was decided but never journaled, and rewrites
   rebuilds from this vault each night. Record durable things here, not only
   there: the job salvages digest-only lines as `probable` at best, then
   rewrites the digest.
+- **Don't run `rotate-journal.sh --apply` while the job runs.** It writes to
+  the journals too. The job only runs the dry run and reports journals that
+  need rotating, and it stops without committing if it finds a rotation lock.

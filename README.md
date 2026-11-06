@@ -105,6 +105,8 @@ Nothing is gated, but nothing is disguised either.
   lives in `AGENTS.md`.
 - **`## Current state` block** — a pointer summary at the top of each journal, the
   one section that is rewritten rather than appended, with a drift checker.
+- **Journal rollover** — once a journal passes ~60 KB, its oldest entries move
+  verbatim into `journal/YYYY-MM.md`, so it stays previewable and readable whole.
 - **Rejected alternatives recorded** — a decision without its discarded options is
   unreviewable a year later.
 - **Project archive** — move an inactive project to `_archive/<Folder-Name>/`
@@ -128,7 +130,7 @@ Nothing is gated, but nothing is disguised either.
 | `reference/upgrading.md` | Upgrading an established vault, per version |
 | `reference/nightly-consolidation.md` | The optional nightly job: why, setup, verification |
 | `templates/` | `AGENTS.md`, client pointers (`CLAUDE.md`, `HERMES.md`), `MEMORY-SCHEMA.md`, `JOURNAL.md`, `_archive/README.md`, `DREAM.md` |
-| `scripts/` | History setup, Claude hook installer, auto-commit, launchd sweep, current-state checker, project scaffolder, archiver, upgrader, dream commit wrapper |
+| `scripts/` | History setup, Claude hook installer, auto-commit, launchd sweep, current-state checker, journal rollover, project scaffolder, archiver, upgrader, dream commit wrapper |
 
 `reference/pitfalls.md` is worth reading even if you let the AI drive.
 
@@ -149,5 +151,5 @@ bash skills/self-recording/tests/test-skill.sh
 
 ## Status and licensing
 
-Version 0.5.0. MIT. Built from a working setup rather than designed in the
+Version 0.6.0. MIT. Built from a working setup rather than designed in the
 abstract — every item in `pitfalls.md` cost real debugging time.

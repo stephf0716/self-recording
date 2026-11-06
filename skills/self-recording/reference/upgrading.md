@@ -72,6 +72,43 @@ next time each block is regenerated.
 
 ## 0.4.0 → 0.5.0
 
+**Tools:** `check-current-state.sh` now counts decisions in `journal/*.md` as well
+as `JOURNAL.md` — replaced by `--apply` if untouched. If it is MODIFIED, merge
+the `jdir` / `set --` block and the `FNR == 1` reset by hand, or rotation will
+make counted markers STALE.
+
+**New, opt-in:** `rotate-journal.sh` rolls the oldest entries of a journal past
+~60 KB into `<project>/journal/YYYY-MM.md`, verbatim. The report shows it
+`ABSENT`; that is expected. Offer it when a journal is large. To enable:
+
+```bash
+cp scripts/rotate-journal.sh /path/to/vault/_tools/
+bash /path/to/vault/_tools/rotate-journal.sh          # dry run first; show the owner
+bash /path/to/vault/_tools/rotate-journal.sh --apply  # then commit it as its own boundary
+```
+
+Install `check-current-state.sh` 0.5.0 first, or the checker will undercount.
+
+**Contract — merge into the vault's `AGENTS.md` and `MEMORY-SCHEMA.md`** only if
+rotation is enabled: the "Keeping journals small: `journal/` rollover" section of
+`templates/AGENTS.md`, the `journal-archive` type, and audit greps that also
+`--include='20??-??.md'`.
+
+**Journals:** untouched until the owner runs `--apply`. Rotation moves whole
+entries only and adds one pointer line above `## Current state`. Run it only
+when no other session is working in the vault, with the journals closed in
+editors.
+
+**A vault that ran an earlier copy of `rotate-journal.sh`** (ai-ws did, before
+0.5.0) may have half-applied rotations: month files written while every moved
+entry is still in `JOURNAL.md`. With nothing else writing, the 0.5.0 dry run
+lists them as `REPAIR` ("drop N already in journal/"); `--apply` removes the
+copies from `JOURNAL.md`. `CONFLICT` means a copy was edited after it rolled:
+keep the newer text by hand first. Until repaired, `check-current-state.sh`
+counts those decisions twice and reports `STALE`.
+
+## 0.5.0 → 0.6.0
+
 **Tools:** none changed. `--apply` updates the stamp.
 
 **New, optional — nightly consolidation ("dream").** Not enabled by upgrading.
@@ -98,3 +135,9 @@ into the vault and deliberately does not rebuild them; the owner reviews the
 harvest before the second run does. Do not backfill weeks of old sessions in
 one unattended run; if the owner wants a backfill, do it in a live session, a
 week at a time.
+
+If the vault rotates journals (0.5.0), the job reads rolled entries in
+`journal/YYYY-MM.md` too, and never rotates: it only runs the dry run and lists
+what needs rotating in its report. Keep `rotate-journal.sh --apply` out of the
+job's schedule window; `dream-commit.sh` refuses to start, or to commit, while
+a rotation lock (`<project>/.rotate-journal.lock/`) exists.

@@ -22,6 +22,9 @@
 #          for the run, "dream: YYYY-MM-DD" (the date the run began), and warns
 #          if any other commit landed mid-run, because then a single revert no
 #          longer undoes the whole night.
+#   Both refuse, committing nothing, while a journal rotation holds its lock
+#   (<project>/.rotate-journal.lock/). end then leaves the log without
+#   completed:, so the next run retries the window.
 #
 # Logs are _agent/sessions/YYYY-MM-DD-dream-<host>.md, then -2, -3 for later
 # runs that day. host defaults to DREAM_HOST, then `hostname -s`. Only this
@@ -67,6 +70,19 @@ fi
 SESS="$VAULT/_agent/sessions"
 STATE="$GIT_DIR_PATH/dream-run"   # per-machine, never synced
 dirty_count() { g status --porcelain -uall | grep -c .; }
+
+# A journal rotation in progress (rotate-journal.sh --apply holds
+# <project>/.rotate-journal.lock/) is another writer on the journals, and
+# mid-rotation the tree is half-replaced. Never commit it, nor start beside it.
+rotation_lock() {
+  find "$VAULT" -maxdepth 3 -type d -name .rotate-journal.lock -print 2>/dev/null | head -n 1
+}
+lock="$(rotation_lock)"
+if [ -n "$lock" ]; then
+  echo "dream-commit: journal rotation in progress (${lock#"$VAULT"/}) -- stop; nothing committed." >&2
+  echo "              Do not run rotate-journal.sh --apply during the dream window. The next run retries this window." >&2
+  exit 1
+fi
 
 # This host's logs as "date n path", oldest first; n is 1 for the unsuffixed log.
 host_logs() {
